@@ -1,0 +1,19 @@
+cmake_minimum_required(VERSION 2.8)
+
+project(tria CXX)
+set(CMAKE_AUTOMOC ON)
+
+find_package(Qt5Core REQUIRED)
+
+Find_Package(LLVM REQUIRED)
+link_directories(${LLVM_LIB_DIR})
+
+Find_Package(Clang REQUIRED)
+include_directories(${CLANG_INCLUDE_DIRS})
+
+add_executable(tria main.cpp triaastconsumer.cpp generator.cpp definitions.cpp)
+target_link_libraries(tria ${CLANG_LIBS} ${LLVM_LIBS_CORE} ${LLVM_LDFLAGS})
+qt5_use_modules(tria Core)
+
+ADD_DEFINITIONS("-std=c++11 -Wall ")
+ADD_DEFINITIONS("-D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS ")
