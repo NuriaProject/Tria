@@ -37,6 +37,14 @@ void Generator::addClassDefinition (const ClassDef &theClass) {
 	this->m_classes.append (theClass);
 }
 
+void Generator::addDeclaredType (const QString &type) {
+	this->m_declaredTypes.insert (type);
+}
+
+void Generator::declareType (const QString &type) {
+	this->m_declareTypes.insert (type);
+}
+
 static QByteArray escapeName (QString name) {
 	return name.replace (QRegExp ("[^A-Za-z0-9]"), "_").toLatin1 ();
 	
@@ -74,6 +82,10 @@ bool Generator::generate (QIODevice *device) {
 		writeDeclareMetatypeForClass (def, device);
 	}
 	
+	for (const QString &typeName : this->m_declareTypes) {
+		writeDeclareMetatype (typeName, device);
+	}
+	
 	device->write ("\n"
 		       "namespace TriaObjectData {\n\n");
 	
@@ -95,7 +107,7 @@ bool Generator::generate (QIODevice *device) {
 	}
 	
 	// Write string buffer
-	writeStringBuffer (device);
+//	writeStringBuffer (device);
 	
 	// Write buffer
 	device->write (classDefBuffer.data ());
@@ -176,28 +188,38 @@ void Generator::writeStringBuffer (QIODevice *device) {
 }
 
 void Generator::writeRegisterMetatypeForClass (const ClassDef &def, QIODevice *device) {
-	device->write ("    qRegisterMetaType< ");
-	device->write (def.name.toLatin1 ());
-	device->write ("* > ();\n");
+	writeRegisterMetatype (def.name + QStringLiteral ("*"), device);
 	
 	if (def.hasValueSemantics) {
-		device->write ("    qRegisterMetaType< ");
-		device->write (def.name.toLatin1 ());
-		device->write (" > ();\n");
+		writeRegisterMetatype (def.name, device);
 	}
 	
 }
 
+void Generator::writeRegisterMetatype (const QString &type, QIODevice *device) {
+	device->write ("    qRegisterMetaType< ");
+	device->write (type.toLatin1 ());
+	device->write (" > ();\n");
+	
+}
+
 void Generator::writeDeclareMetatypeForClass (const ClassDef &def, QIODevice *device) {
-	device->write ("Q_DECLARE_METATYPE(");
-	device->write (def.name.toLatin1 ());
-	device->write ("*)\n");
+	writeDeclareMetatype (def.name + QStringLiteral ("*"), device);
 	
 	if (def.hasValueSemantics) {
-		device->write ("Q_DECLARE_METATYPE(");
-		device->write (def.name.toLatin1 ());
-		device->write (")\n");
+		writeDeclareMetatype (def.name, device);
 	}
+	
+}
+
+void Generator::writeDeclareMetatype (const QString &type, QIODevice *device) {
+	if (this->m_declaredTypes.contains (type)) {
+		return;
+	}
+	
+	device->write ("Q_DECLARE_METATYPE(");
+	device->write (type.toLatin1 ());
+	device->write (");\n");
 	
 }
 
@@ -241,6 +263,14 @@ void Generator::writeInstantiorClass (QIODevice *device) {
 	device->write (prefix);
 	device->write ("Register () {\n");
 	
+	// Register additional types
+	device->write ("    // Register additional needed types\n");
+	for (const QString &typeName : this->m_declareTypes) {
+		writeRegisterMetatype (typeName, device);
+	}
+	
+	device->write ("\n");
+	
 	// Register all known classes
 	for (const ClassDef &cur : this->m_classes) {
 		device->write ("    // Register class ");
@@ -254,7 +284,6 @@ void Generator::writeInstantiorClass (QIODevice *device) {
 		writeRegisterMetatypeForClass (cur, device);
 		device->write ("\n");
 	}
-	
 	// End class
 	device->write ("  }\n"
 		       "};\n\n");

@@ -23,6 +23,7 @@
 #include <functional>
 
 #include <QMap>
+#include <QSet>
 
 class QIODevice;
 
@@ -32,6 +33,12 @@ public:
 	
 	/** Adds \a theClass. */
 	void addClassDefinition (const ClassDef &theClass);
+	
+	/** Registers \a type as already Q_DECLARE_METATYPE'd. */
+	void addDeclaredType (const QString &type);
+	
+	/** Tells the generator to generate a metatype declaration. */
+	void declareType (const QString &type);
 	
 	/** Generates code and writes it to \a device. */
 	bool generate (QIODevice *device);
@@ -47,7 +54,9 @@ private:
 	void writeStringBuffer (QIODevice *device);
 	
 	void writeRegisterMetatypeForClass (const ClassDef &def, QIODevice *device);
+	void writeRegisterMetatype (const QString &type, QIODevice *device);
 	void writeDeclareMetatypeForClass (const ClassDef &def, QIODevice *device);
+	void writeDeclareMetatype (const QString &type, QIODevice *device);
 	void writeMemberConverters (const ClassDef &def, QIODevice *device);
 	
 	void writeInstantiorClass (QIODevice *device);
@@ -78,6 +87,8 @@ private:
 	
 	// 
 	QString m_fileName;
+	QSet< QString > m_declaredTypes;
+	QSet< QString > m_declareTypes;
 	QVector< ClassDef > m_classes;
 	
 	// 

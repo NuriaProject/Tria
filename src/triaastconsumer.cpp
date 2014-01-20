@@ -17,6 +17,7 @@
 
 #include "triaastconsumer.hpp"
 
+#include <clang/AST/DeclTemplate.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/Attr.h>
 
@@ -109,20 +110,24 @@ static inline QString llvmToString (const llvm::StringRef &str) {
 	return QString::fromLatin1 (str.data (), str.size ());
 }
 
-static BaseDef processBase (clang::CXXBaseSpecifier *specifier) {
-	BaseDef base;
-	
-	base.name = QString::fromStdString (specifier->getType ().getAsString ());
-	base.access = specifier->getAccessSpecifier ();
-	base.isVirtual = specifier->isVirtual ();
+static inline QString typeName (const clang::QualType &type) {
+	QString str = QString::fromStdString (type.getAsString ());
 	
 	// Cut off leading "struct/class "
-	base.name = base.name.mid (base.name.indexOf (QLatin1Char (' ')) + 1);
+	return str.mid (str.indexOf (QLatin1Char (' ')) + 1);
+}
+
+BaseDef TriaASTConsumer::processBase (clang::CXXBaseSpecifier *specifier) {
+	BaseDef base;
+	
+	base.name = typeName (specifier->getType ());
+	base.access = specifier->getAccessSpecifier ();
+	base.isVirtual = specifier->isVirtual ();
 	
 	return base;
 }
 
-static MethodDef processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl) {
+MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl) {
 	static const QString fromMethod = QStringLiteral ("from");
 	static const QString toMethod = QStringLiteral ("to");
 	
@@ -148,8 +153,13 @@ static MethodDef processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl) 
 		def.type = DestructorMethod;
 	} else {
 		def.name = llvmToString (decl->getName ());
-		def.returnType = QString::fromStdString (decl->getResultType ().getAsString ());
+		def.returnType = typeName (decl->getResultType ());
 		def.type = decl->isStatic () ? StaticMethod : MemberMethod;
+		
+		// Also register result-type in the meta-system later on!
+		// TODO: Check if this is possible.
+		declareType (decl->getResultType ());
+		
 	}
 	
 	// Arguments
@@ -160,8 +170,11 @@ static MethodDef processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl) 
 		
 		var.access = clang::AS_public;
 		var.name = llvmToString (param->getName ());
-		var.type = QString::fromStdString (param->getType ().getAsString ());
+		var.type = typeName (param->getType ());
 		var.isOptional = param->hasDefaultArg ();
+		
+		// Register type
+		declareType (param->getType ());
 		
 		// This may be a viable conversion method if it only expects a
 		// single argument (Plus optional ones)
@@ -191,18 +204,20 @@ static MethodDef processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl) 
 	return def;
 }
 
-static VariableDef processVariable (clang::FieldDecl *decl) {
+VariableDef TriaASTConsumer::processVariable (clang::FieldDecl *decl) {
 	VariableDef def;
 	
 	def.access = (decl->getAccess () == clang::AS_none) ? clang::AS_public : decl->getAccess ();
-	def.type = QString::fromStdString (decl->getType ().getAsString ());
+	def.type = typeName (decl->getType ());
 	def.name = llvmToString (decl->getName ());
 	def.annotations = annotationsFromDecl (decl);
+	
+	declareType (decl->getType ());
 	
 	return def;
 }
 
-static EnumDef processEnum (clang::EnumDecl *decl) {
+EnumDef TriaASTConsumer::processEnum (clang::EnumDecl *decl) {
 	EnumDef def;
 	
 	def.name = llvmToString (decl->getName ());
@@ -217,6 +232,8 @@ static EnumDef processEnum (clang::EnumDecl *decl) {
 }
 
 void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
+	static const llvm::StringRef qMetaTypeIdName ("QMetaTypeId");
+	
 	/*
 	clang::EnumDecl *enumDecl = llvm::dyn_cast< clang::EnumDecl >(decl);
 	if (enumDecl) {
@@ -230,7 +247,20 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 		return;
 	}
 	
-	// 
+	// Check if this is a QMetaTypeId specialization (Result of a Q_DECLARE_METATYPE)
+	clang::ClassTemplateSpecializationDecl *templ = llvm::dyn_cast< clang::ClassTemplateSpecializationDecl > (decl);
+	
+	if (templ && templ->getName () == qMetaTypeIdName) {
+		const clang::TemplateArgumentList &list = templ->getTemplateArgs ();
+		if (list.size () == 1) {
+			QString name = typeName (list.get (0).getAsType ());
+			this->m_generator->addDeclaredType (name);
+		}
+		
+		return;
+	}
+	
+	// Base data
 	ClassDef classDef;
 	classDef.access = decl->getAccess ();
 	classDef.name = QString::fromStdString (decl->getQualifiedNameAsString ());
@@ -314,5 +344,22 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	
 	// Done.
 	this->m_generator->addClassDefinition (classDef);
+	
+}
+
+void TriaASTConsumer::declareType (const clang::QualType &type) {
+	
+	// Ignore if it's either a POD-type (Which is already registered) or if
+	// it begins with "Q" (indicating it's a Qt type) and is known to the
+	// meta-system of this running tria instance.
+	QString name = typeName (type);
+	
+	if ((type.isPODType (*this->m_context) || name.startsWith (QLatin1Char ('Q')))
+	    && QMetaType::type (qPrintable(name)) != 0) {
+		return;
+	}
+	
+	// FIXME: Check if we actually can declare it
+	this->m_generator->declareType (name);
 	
 }

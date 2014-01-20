@@ -21,7 +21,7 @@
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/Decl.h>
-
+#include "definitions.hpp"
 
 namespace clang {
 class StaticAssertDecl;
@@ -37,6 +37,12 @@ public:
 	void HandleTagDeclDefinition (clang::TagDecl *decl) override;
 	
 private:
+	void declareType (const clang::QualType &type);
+	
+	BaseDef processBase (clang::CXXBaseSpecifier *specifier);
+	MethodDef processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl);
+	VariableDef processVariable (clang::FieldDecl *decl);
+	EnumDef processEnum (clang::EnumDecl *decl);
 	
 	Generator *m_generator;
 	clang::CompilerInstance &m_compiler;
