@@ -22,7 +22,9 @@
 #include <QStringList>
 #include <QString>
 #include <QVector>
+#include <QDebug>
 #include <QFile>
+#include <QDir>
 
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Frontend/FrontendActions.h>
@@ -198,6 +200,39 @@ static bool generateCode (Generator *generator, const QString &output) {
 	
 }
 
+static QVector< QByteArray > mapVirtualFiles (clang::tooling::ToolInvocation &tool,
+								const QDir &directory, const QString &prefix) {
+	QVector< QByteArray > buffers;
+	
+	QStringList builtinHeaders = directory.entryList (QDir::Files);
+	QStringList dirs = directory.entryList (QDir::Dirs);
+	
+	for (const QString &cur : dirs) {
+		QDir d = directory;
+		d.cd (cur);
+		buffers += mapVirtualFiles (tool, d, prefix + cur + "/");
+	}
+	
+	for (QString cur : builtinHeaders) {
+		QFile file (directory.filePath (cur));
+		file.open (QIODevice::ReadOnly);
+		
+		QByteArray name = prefix.toLatin1 () + cur.toLatin1 ();
+		const char *rawName = name.constData ();
+		
+		QByteArray content = file.readAll ();
+		const char *rawContent = content.constData ();
+		
+		buffers << name << content;
+		
+		llvm::StringRef nameRef (rawName, size_t (name.length ()));
+		llvm::StringRef dataRef (rawContent, size_t (content.length ()));
+		tool.mapVirtualFile (nameRef, dataRef);
+	}
+	
+	return buffers;
+}
+
 int main (int argc, const char **argv) {
 	std::vector< std::string > arguments;
 	
@@ -207,7 +242,6 @@ int main (int argc, const char **argv) {
 	arguments.push_back ("c++");
 	arguments.push_back ("-fPIE");
 	arguments.push_back ("-DTRIA_RUN");
-	arguments.push_back ("-std=c++11");
 	
 	// Parse arguments
 	Options options;
@@ -225,10 +259,14 @@ int main (int argc, const char **argv) {
 		arguments.push_back ("-fsyntax-only");
 	}
 	
-	// Create tool and run it.
+	// Create tool instance
 	Generator generator (options.sourceFile);
 	clang::tooling::ToolInvocation tool (arguments, createAction (options.preprocessOnly, &generator), fm);
 	
+	// Map shipped built-in headers
+	auto fileBuffers = mapVirtualFiles (tool, QDir (":/headers/"), QStringLiteral ("/builtins/"));
+	
+	// Run it
 	if (!tool.run()) {
 		return 1;
 	}
@@ -237,6 +275,9 @@ int main (int argc, const char **argv) {
 	if (!generateCode (&generator, options.output)) {
 		return 2;
 	}
+	
+	// Avoid "fileHandles is unused" warning
+	fileBuffers.clear ();
 	
 	// 
 	return 0;

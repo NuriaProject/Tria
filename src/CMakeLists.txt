@@ -11,7 +11,9 @@ link_directories(${LLVM_LIB_DIR})
 Find_Package(Clang REQUIRED)
 include_directories(${CLANG_INCLUDE_DIRS})
 
-add_executable(tria main.cpp triaastconsumer.cpp generator.cpp definitions.cpp)
+qt5_add_resources(qrc_headers.cpp ../headers.qrc)
+
+add_executable(tria main.cpp triaastconsumer.cpp generator.cpp definitions.cpp qrc_headers.cpp)
 target_link_libraries(tria ${CLANG_LIBS} ${LLVM_LIBS_CORE} ${LLVM_LDFLAGS})
 qt5_use_modules(tria Core)
 
