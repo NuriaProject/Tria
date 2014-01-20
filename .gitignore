@@ -1,5 +1,5 @@
 *.o
 *_moc.cpp
+*_automoc.cpp
 *.pro.user*
 Makefile
-automoc_*
