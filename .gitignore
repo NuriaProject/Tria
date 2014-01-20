@@ -2,4 +2,5 @@
 *_moc.cpp
 *_automoc.cpp
 *.pro.user*
+CMakeLists.txt.user
 Makefile
