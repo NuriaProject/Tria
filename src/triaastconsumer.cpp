@@ -141,8 +141,8 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 	def.isVirtual = decl->isVirtual ();
 	def.annotations = annotationsFromDecl (decl);
 	
-	// Skip non-public methods
-	if (def.access != clang::AS_public) {
+	// Skip non-public methods and methods which are default-implemented
+	if (def.access != clang::AS_public || decl->isDefaulted ()) {
 		return def;
 	}
 	
