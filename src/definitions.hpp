@@ -77,6 +77,7 @@ struct ConversionDef {
 	MethodType type;
 	QString fromType;
 	QString toType;
+	bool isConst;
 };
 
 typedef QVector< ConversionDef > Conversions;

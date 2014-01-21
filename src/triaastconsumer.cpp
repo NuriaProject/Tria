@@ -195,6 +195,7 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 				? classDef.name : def.arguments.first ().type;
 		conv.toType = (def.type == ConstructorMethod)
 			      ? classDef.name : def.returnType;
+		conv.isConst = clang::Qualifiers::fromCVRMask (decl->getTypeQualifiers ()).hasConst ();
 		
 		// 
 		classDef.conversions.append (conv);
