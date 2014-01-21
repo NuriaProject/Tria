@@ -4,3 +4,4 @@
 *.pro.user*
 CMakeLists.txt.user
 Makefile
+headers.qrc

@@ -217,10 +217,10 @@ VariableDef TriaASTConsumer::processVariable (clang::FieldDecl *decl) {
 	return def;
 }
 
-EnumDef TriaASTConsumer::processEnum (clang::EnumDecl *decl) {
+EnumDef TriaASTConsumer::processEnum (ClassDef &parent, clang::EnumDecl *decl) {
 	EnumDef def;
 	
-	def.name = llvmToString (decl->getName ());
+	def.name = parent.name + QStringLiteral ("::") + llvmToString (decl->getName ());
 	def.annotations = annotationsFromDecl (decl);
 	
 	for (auto it = decl->enumerator_begin (); it != decl->enumerator_end (); ++it) {
@@ -310,22 +310,23 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	
 	// Find enums
 	for (auto it = record->decls_begin (); it != record->decls_end (); ++it) {
-		clang::EnumDecl *enumDecl = llvm::dyn_cast< clang::EnumDecl >(decl);
+		clang::EnumDecl *enumDecl = llvm::dyn_cast< clang::EnumDecl >(*it);
 		if (!enumDecl) {
 			continue;
 		}
 		
 		// 
 		clang::AccessSpecifier access = enumDecl->getAccess ();
-		EnumDef enumDef = processEnum (enumDecl);
+		EnumDef enumDef = processEnum (classDef, enumDecl);
 		
 		if ((access != clang::AS_public && access != clang::AS_none) ||
 		    containsAnnotation (enumDef.annotations, skipAnnotation)) {
 			continue;
 		}
 		
-		// 
+		// Store and declare
 		classDef.enums.append (enumDef);
+		this->m_generator->declareType (enumDef.name);
 		
 	}
 	
