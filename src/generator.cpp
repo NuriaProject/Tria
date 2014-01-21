@@ -239,10 +239,10 @@ void Generator::writeMemberConverters (const ClassDef &def, QIODevice *device) {
 		device->write ("_to_");
 		device->write (to);
 		device->write (" (const ");
-		device->write (from);
+		device->write (cur.fromType.toLatin1 ());
 		device->write (" &value) {\n"
 			       "    return new ");
-		device->write (to);
+		device->write (cur.toType.toLatin1 ());
 		device->write (" (value.");
 		device->write (cur.methodName.toLatin1 ());
 		device->write (" ());\n"
