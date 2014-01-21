@@ -58,6 +58,8 @@ private:
 	void writeDeclareMetatypeForClass (const ClassDef &def, QIODevice *device);
 	void writeDeclareMetatype (const QString &type, QIODevice *device);
 	void writeMemberConverters (const ClassDef &def, QIODevice *device);
+	void writeMemberConverter (const ConversionDef &def, QIODevice *device);
+	void writeStaticConverter (const ConversionDef &def, QIODevice *device);
 	
 	void writeInstantiorClass (QIODevice *device);
 	void writeConversionRegisterers (const ClassDef &def, QIODevice *device);

@@ -225,35 +225,65 @@ void Generator::writeDeclareMetatype (const QString &type, QIODevice *device) {
 
 void Generator::writeMemberConverters (const ClassDef &def, QIODevice *device) {
 	for (const ConversionDef &cur : def.conversions) {
-		if (cur.type != MemberMethod) {
-			continue;
+		if (cur.type == MemberMethod) {
+			writeMemberConverter (cur, device);
+		} else if (cur.type == StaticMethod) {
+			writeStaticConverter (cur, device);
 		}
 		
-		QByteArray from = escapeName (cur.fromType);
-		QByteArray to = escapeName (cur.toType);
-		
-		device->write ("static ");
-		device->write (cur.toType.toLatin1 ());
-		device->write (" *tria_convert_");
-		device->write (from);
-		device->write ("_to_");
-		device->write (to);
-		device->write (" (");
-		
-		if (cur.isConst) {
-			device->write ("const ");
-		}
-		
-		device->write (cur.fromType.toLatin1 ());
-		device->write (" &value) {\n"
-			       "    return new ");
-		device->write (cur.toType.toLatin1 ());
-		device->write (" (value.");
-		device->write (cur.methodName.toLatin1 ());
-		device->write (" ());\n"
-			       "}\n\n");
 		
 	}
+	
+}
+
+void Generator::writeMemberConverter (const ConversionDef &def, QIODevice *device) {
+	QByteArray from = escapeName (def.fromType);
+	QByteArray to = escapeName (def.toType);
+	
+	device->write ("inline static ");
+	device->write (def.toType.toLatin1 ());
+	device->write (" *tria_convert_");
+	device->write (from);
+	device->write ("_to_");
+	device->write (to);
+	device->write (" (");
+	
+	if (def.isConst) {
+		device->write ("const ");
+	}
+	
+	device->write (def.fromType.toLatin1 ());
+	device->write (" &value) {\n"
+		       "    return new ");
+	device->write (def.toType.toLatin1 ());
+	device->write (" (value.");
+	device->write (def.methodName.toLatin1 ());
+	device->write (" ());\n"
+		       "}\n\n");
+	
+}
+
+void Generator::writeStaticConverter (const ConversionDef &def, QIODevice *device) {
+	QByteArray from = escapeName (def.fromType);
+	QByteArray to = escapeName (def.toType);
+	
+	device->write ("inline static ");
+	device->write (def.toType.toLatin1 ());
+	device->write (" *tria_convert_");
+	device->write (from);
+	device->write ("_to_");
+	device->write (to);
+	device->write (" (const ");
+	device->write (def.fromType.toLatin1 ());
+	device->write (" &value) {\n"
+		       "    return new ");
+	device->write (def.toType.toLatin1 ());
+	device->write (" (");
+	device->write (def.toType.toLatin1 ());
+	device->write ("::");
+	device->write (def.methodName.toLatin1 ());
+	device->write (" (value));\n"
+		       "}\n\n");
 	
 }
 
@@ -311,13 +341,7 @@ void Generator::writeConversionRegisterers (const ClassDef &def, QIODevice *devi
 			device->write (", ");
 			device->write (cur.toType.toLatin1 ());
 			device->write (" > ();\n");
-		} else if (cur.type == StaticMethod) { // from*
-			device->write (" (&");
-			device->write (def.name.toLatin1 ());
-			device->write ("::");
-			device->write (cur.methodName.toLatin1 ());
-			device->write (");\n");
-		} else if (cur.type == MemberMethod) { // to*
+		} else if (cur.type == MemberMethod || cur.type == StaticMethod) { // to*
 			device->write (" (&tria_convert_");
 			device->write (escapeName (cur.fromType));
 			device->write ("_to_");
