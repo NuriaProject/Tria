@@ -246,17 +246,18 @@ void Generator::writeMemberConverter (const ConversionDef &def, QIODevice *devic
 	device->write (from);
 	device->write ("_to_");
 	device->write (to);
-	device->write (" (");
-	
-	if (def.isConst) {
-		device->write ("const ");
+	device->write (" (const ");
+	device->write (def.fromType.toLatin1 ());
+	device->write (" &value) {\n");
+	if (!def.isConst) {
+		device->write ("    ");
+		device->write (def.fromType.toLatin1 ());
+		device->write (" temp (value);\n");
 	}
 	
-	device->write (def.fromType.toLatin1 ());
-	device->write (" &value) {\n"
-		       "    return new ");
+	device->write ("    return new ");
 	device->write (def.toType.toLatin1 ());
-	device->write (" (value.");
+	device->write (!def.isConst ? " (temp." : " (value.");
 	device->write (def.methodName.toLatin1 ());
 	device->write (" ());\n"
 		       "}\n\n");
@@ -777,7 +778,7 @@ void Generator::writeEnumMethods (const ClassDef &def, QIODevice *device) {
 	
 	// int enumElementCount (int index) const
 	std::function< QByteArray(const EnumDef &) > enumCount = [this](const EnumDef &e) {
-		return QByteArray::number (e.values.length ());
+		return QByteArrayLiteral ("return ") + QByteArray::number (e.values.length ());
 	};
 	
 	writeGenericFunction (def.enums, device, "int _enumElementCount (int index)", "-1", "index", enumCount);
@@ -921,11 +922,29 @@ void Generator::writeEnumGeneric (const Enums &enums, QIODevice *device, const Q
 	
 }
 
+static QByteArray getPrototype (const ClassDef &def, const MethodDef &m) {
+	QByteArray prototype;
+	prototype.append (m.returnType.toLatin1 ());
+	prototype.append ("(");
+	
+	if (m.type == MemberMethod) {
+		prototype.append (def.name.toLatin1 ());
+		prototype.append ("::");
+	}
+	
+	prototype.append ("*)(");
+	for (int i = 0; i < m.arguments.length (); i++) {
+		prototype.append (m.arguments.at (i).type);
+		prototype.append ((i + 1 < m.arguments.length ()) ? "," : "");
+	}
+	prototype.append (")");
+	
+	return prototype;
+}
+
 QByteArray Generator::methodToCallback (const ClassDef &def, const MethodDef &m) {
-	if (m.type == StaticMethod) {
-		return QByteArrayLiteral ("Nuria::Callback (&") + def.name.toLatin1 () +
-				QByteArrayLiteral ("::") + m.name.toLatin1 () + QByteArrayLiteral (")");
-	} else if (m.type == ConstructorMethod) {
+	QByteArray cb;
+	if (m.type == ConstructorMethod) {
 		QByteArray args;
 		QByteArray call;
 		
@@ -941,8 +960,8 @@ QByteArray Generator::methodToCallback (const ClassDef &def, const MethodDef &m)
 		args.chop (2); // Remove trailing ", "
 		call.chop (2);
 		
-		QByteArray cb = QByteArrayLiteral ("Nuria::Callback::fromLambda ([](") + args +
-				QByteArrayLiteral (") { return new ") + def.name.toLatin1 ();
+		cb = QByteArrayLiteral ("Nuria::Callback::fromLambda ([](") + args +
+		     QByteArrayLiteral (") { return new ") + def.name.toLatin1 ();
 		
 		if (!args.isEmpty ()) {
 			cb.append ("(");
@@ -954,9 +973,32 @@ QByteArray Generator::methodToCallback (const ClassDef &def, const MethodDef &m)
 		return cb;
 	}
 	
-	return QByteArrayLiteral ("Nuria::Callback (reinterpret_cast< ") +  def.name.toLatin1 () + 
-			QByteArrayLiteral (" * > (instance), &") + def.name.toLatin1 () +
-			QByteArrayLiteral ("::") + m.name.toLatin1 () + QByteArrayLiteral (")");
+	// Member or static method
+	cb.append ("Nuria::Callback (");
+	
+	if (m.type == MemberMethod) {
+		cb.append ("reinterpret_cast< ");
+		cb.append (def.name.toLatin1 ());
+		cb.append (" * > (instance), ");
+	}
+	
+	QByteArray prototype = getPrototype (def, m);
+	
+	if (m.isConst) {
+		cb.append ("reinterpret_cast< ");
+		cb.append (prototype);
+		cb.append (" > (");
+	}
+	
+	cb.append ("(");
+	cb.append (prototype);
+	cb.append (m.isConst ? "const" : "");
+	cb.append (")&");
+	cb.append (def.name.toLatin1 ());
+	cb.append ("::");
+	cb.append (m.name.toLatin1 ());
+	cb.append (m.isConst ? "))" : ")");
+	return cb;
 }
 
 QByteArray Generator::generateSetter (const ClassDef &def, const VariableDef &var) {

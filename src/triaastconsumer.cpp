@@ -139,6 +139,7 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 	// Base information
 	def.access = (decl->getAccess () == clang::AS_none) ? clang::AS_public : decl->getAccess ();
 	def.isVirtual = decl->isVirtual ();
+	def.isConst = clang::Qualifiers::fromCVRMask (decl->getTypeQualifiers ()).hasConst ();
 	def.annotations = annotationsFromDecl (decl);
 	
 	// Skip non-public methods and methods which are default-implemented
@@ -173,6 +174,7 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 		var.name = llvmToString (param->getName ());
 		var.type = typeName (param->getType ());
 		var.isOptional = param->hasDefaultArg ();
+		var.isConst = param->getType ().getQualifiers ().hasConst ();
 		
 		// Register type
 		declareType (param->getType ());
@@ -196,7 +198,7 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 				? classDef.name : def.arguments.first ().type;
 		conv.toType = (def.type == ConstructorMethod)
 			      ? classDef.name : def.returnType;
-		conv.isConst = clang::Qualifiers::fromCVRMask (decl->getTypeQualifiers ()).hasConst ();
+		conv.isConst = def.isConst && (def.type == MemberMethod || def.arguments.first ().isConst);
 		
 		// 
 		classDef.conversions.append (conv);

@@ -54,6 +54,7 @@ struct VariableDef {
 	
 	Annotations annotations;
 	
+	bool isConst = false;
 	bool isOptional = false;
 };
 
@@ -63,6 +64,7 @@ struct MethodDef {
 	clang::AccessSpecifier access;
 	MethodType type;
 	bool isVirtual;
+	bool isConst;
 	QString name;
 	QString returnType;
 	Variables arguments;
