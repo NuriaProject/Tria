@@ -143,6 +143,7 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 	
 	// Skip non-public methods and methods which are default-implemented
 	if (def.access != clang::AS_public || decl->isDefaulted ()) {
+		def.access = clang::AS_private;
 		return def;
 	}
 	
