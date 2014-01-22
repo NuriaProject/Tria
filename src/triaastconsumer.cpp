@@ -18,6 +18,7 @@
 #include "triaastconsumer.hpp"
 
 #include <clang/AST/DeclTemplate.h>
+#include <clang/AST/ASTContext.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/Attr.h>
 
@@ -110,11 +111,58 @@ static inline QString llvmToString (const llvm::StringRef &str) {
 	return QString::fromLatin1 (str.data (), str.size ());
 }
 
-static inline QString typeName (const clang::QualType &type) {
-	QString str = QString::fromStdString (type.getAsString ());
+static inline QString typeName (const clang::Type *type) {
+	const clang::CXXRecordDecl *decl = type->getAsCXXRecordDecl ();
+	if (decl) {
+		return QString::fromStdString (decl->getQualifiedNameAsString ());
+	}
 	
-	// Cut off leading "struct/class "
-	return str.mid (str.indexOf (QLatin1Char (' ')) + 1);
+	return QString::fromStdString (clang::QualType (type, 0).getAsString ());
+}
+
+static inline QString typeName (const clang::QualType &type) {
+	return typeName (type.getTypePtr ());
+}
+
+static bool hasTypeValueSemantics (const clang::Type *type) {
+	if (type->isPointerType ()) {
+		return true;
+	}
+	
+	const clang::CXXRecordDecl *record = type->getAsCXXRecordDecl ();
+	if (!record) {
+		// FIXME: This can break for typedef's
+		return true;
+	}
+	
+	// Search for the default- and copy-constructor, make sure they're not deleted
+	bool seenDefaultCtor = false;
+	bool seenCopyCtor = false;
+	for (auto it = record->ctor_begin (); !seenCopyCtor && !seenCopyCtor && it != record->ctor_end (); ++it) {
+		const clang::CXXConstructorDecl *cur = *it;
+		if (!cur->isDefaultConstructor () && !cur->isCopyConstructor ()) {
+			continue;
+		}
+		
+		// Make sure the ctor or copy-ctor is publicly visible and not deleted.
+		(cur->isDefaultConstructor () ? seenDefaultCtor : seenCopyCtor) = true;
+		clang::AccessSpecifier access = cur->getAccess ();
+		
+		if (cur->isDeleted () || access == clang::AS_private || access == clang::AS_protected) {
+			return false;
+		}
+		
+	}
+	
+	// Probably has value-semantics
+	// FIXME: Also check for a assignment operator.
+	return ((seenDefaultCtor || record->needsImplicitDefaultConstructor ()) &&
+		(seenCopyCtor || record->needsImplicitCopyConstructor ()));
+	
+}
+
+static bool hasTypeValueSemantics (const clang::QualType &type) {
+	return hasTypeValueSemantics (type.getTypePtr ());
 }
 
 BaseDef TriaASTConsumer::processBase (clang::CXXBaseSpecifier *specifier) {
@@ -143,7 +191,9 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 	def.annotations = annotationsFromDecl (decl);
 	
 	// Skip non-public methods and methods which are default-implemented
-	if (def.access != clang::AS_public || decl->isDefaulted ()) {
+	if (def.access != clang::AS_public || decl->isDefaulted () ||
+	    !hasTypeValueSemantics (decl->getResultType ())) {
+		this->m_generator->avoidType (def.returnType);
 		def.access = clang::AS_private;
 		return def;
 	}
@@ -159,7 +209,6 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 		def.type = decl->isStatic () ? StaticMethod : MemberMethod;
 		
 		// Also register result-type in the meta-system later on!
-		// TODO: Check if this is possible.
 		declareType (decl->getResultType ());
 		
 	}
@@ -175,6 +224,13 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 		var.type = typeName (param->getType ());
 		var.isOptional = param->hasDefaultArg ();
 		var.isConst = param->getType ().getQualifiers ().hasConst ();
+		
+		// Ignore methods with arguments without value-semantics
+		if (!hasTypeValueSemantics (param->getType ())) {
+			this->m_generator->avoidType (var.type);
+			def.access = clang::AS_private;
+			return def;
+		}
 		
 		// Register type
 		declareType (param->getType ());
@@ -205,6 +261,7 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 		
 	}
 	
+	// 
 	return def;
 }
 
@@ -216,7 +273,12 @@ VariableDef TriaASTConsumer::processVariable (clang::FieldDecl *decl) {
 	def.name = llvmToString (decl->getName ());
 	def.annotations = annotationsFromDecl (decl);
 	
-	declareType (decl->getType ());
+	if (hasTypeValueSemantics (decl->getType ())) {
+		declareType (decl->getType ());
+	} else {
+		// TODO: Warn user
+		this->m_generator->avoidType (def.type);
+	}
 	
 	return def;
 }
@@ -238,17 +300,14 @@ EnumDef TriaASTConsumer::processEnum (ClassDef &parent, clang::EnumDecl *decl) {
 void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	static const llvm::StringRef qMetaTypeIdName ("QMetaTypeId");
 	
-	/*
-	clang::EnumDecl *enumDecl = llvm::dyn_cast< clang::EnumDecl >(decl);
-	if (enumDecl) {
-		
-		qDebug() << "enum" << QString::fromStdString (enumDecl->getNameAsString ());
-	}
-	*/
-	
 	clang::CXXRecordDecl *record = llvm::dyn_cast< clang::CXXRecordDecl >(decl);
 	if (!record) {
 		return;
+	}
+	
+	// 
+	if (!hasTypeValueSemantics (record->getTypeForDecl ())) {
+		this->m_generator->avoidType (typeName (record->getTypeForDecl ()));
 	}
 	
 	// Check if this is a QMetaTypeId specialization (Result of a Q_DECLARE_METATYPE)
@@ -347,12 +406,24 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 				      classDef.hasCopyCtor &&
 				      classDef.hasAssignmentOperator);
 	
+	if (!classDef.hasValueSemantics) {
+		this->m_generator->avoidType (classDef.name);
+	}
+	
 	// Done.
 	this->m_generator->addClassDefinition (classDef);
 	
 }
 
 void TriaASTConsumer::declareType (const clang::QualType &type) {
+	if (type.getTypePtr ()->isVoidType ()) {
+		return;
+	}
+	
+	// 
+	if (!hasTypeValueSemantics (type)) {
+		return;
+	}
 	
 	// Ignore if it's either a POD-type (Which is already registered) or if
 	// it begins with "Q" (indicating it's a Qt type) and is known to the

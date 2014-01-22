@@ -26,6 +26,7 @@
 #include <QSet>
 
 class QIODevice;
+typedef QSet< QString > StringSet;
 
 class Generator {
 public:
@@ -39,6 +40,12 @@ public:
 	
 	/** Tells the generator to generate a metatype declaration. */
 	void declareType (const QString &type);
+	
+	/** Takes \a type out of the to-be-declared list. */
+	void undeclareType (const QString &type);
+	
+	/** Will avoid \a type when generating code. */
+	void avoidType (const QString &type);
 	
 	/** Generates code and writes it to \a device. */
 	bool generate (QIODevice *device);
@@ -89,8 +96,9 @@ private:
 	
 	// 
 	QString m_fileName;
-	QSet< QString > m_declaredTypes;
-	QSet< QString > m_declareTypes;
+	StringSet m_declaredTypes;
+	StringSet m_declareTypes;
+	StringSet m_avoidedTypes;
 	QVector< ClassDef > m_classes;
 	
 	// 

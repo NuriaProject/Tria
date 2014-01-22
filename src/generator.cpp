@@ -23,6 +23,7 @@
 #include <QIODevice>
 #include <QBuffer>
 #include <QRegExp>
+#include <QDebug>
 
 #include <clang/Tooling/Tooling.h>
 #include "definitions.hpp"
@@ -45,6 +46,14 @@ void Generator::declareType (const QString &type) {
 	this->m_declareTypes.insert (type);
 }
 
+void Generator::undeclareType (const QString &type) {
+	this->m_declareTypes.remove (type);
+}
+
+void Generator::avoidType (const QString &type) {
+	this->m_avoidedTypes.insert (type);
+}
+
 static QByteArray escapeName (QString name) {
 	return name.replace (QRegExp ("[^A-Za-z0-9]"), "_").toLatin1 ();
 	
@@ -56,13 +65,14 @@ static QByteArray identPrefix (QString name) {
 
 QByteArray Generator::toByteArray (const QString &string) {
 	return QByteArrayLiteral ("QByteArrayLiteral (\"") + string.toUtf8 () + QByteArrayLiteral ("\")");
-	
-//	return QByteArrayLiteral ("QByteArray::fromRawData (") + stringAcessor (string) +
-//			QByteArrayLiteral (", ") + QByteArray::number (string.length ()) +
-//			QByteArrayLiteral (")");
 }
 
 bool Generator::generate (QIODevice *device) {
+	
+	// 
+//	qDebug() << "=> Declaring" << this->m_declareTypes;
+//	qDebug() << "=> Already declared" << this->m_declaredTypes;
+//	qDebug() << "=> Avoiding" << this->m_avoidedTypes;
 	
 	// Write prologue. Nothing really dynamic here
 	writeHeader (device);
@@ -367,8 +377,51 @@ static void sortAnnotations (Container &c) {
 	
 }
 
+static bool checkArgumentsForAvoidedTypes (const StringSet &avoid, const Variables &args) {
+	for (const VariableDef &cur : args) {
+		if (avoid.contains (cur.type)) {
+			return true;
+		}
+		
+	}
+	
+	return false;
+}
+
+static void filterMethods (const StringSet &avoid, Methods &methods) {
+	for (int i = 0; i < methods.length (); i++) {
+		const MethodDef &cur = methods.at (i);
+		
+		if (avoid.contains (cur.returnType) ||
+		    checkArgumentsForAvoidedTypes (avoid, cur.arguments)) {
+			methods.remove (i);
+			i--;
+		}
+		
+	}
+	
+}
+
+static void filterFields (const StringSet &avoid, Variables &fields) {
+	for (int i = 0; i < fields.length (); i++) {
+		const VariableDef &cur = fields.at (i);
+		
+		if (avoid.contains (cur.type)) {
+			fields.remove (i);
+			i--;
+		}
+		
+	}
+	
+}
+
 void Generator::writeClassDef (ClassDef &def, QIODevice *device) {
 	QByteArray prefix = identPrefix (this->m_fileName);
+	
+	// Filter methods and fields which can't be exposed as their type(s)
+	// doesn't have value-semantics.
+	filterMethods (this->m_avoidedTypes, def.methods);
+	filterFields (this->m_avoidedTypes, def.variables);
 	
 	// Sort methods, fields and enums for faster access
 	std::sort (def.annotations.begin (), def.annotations.end (), &sortByName< AnnotationDef >);
