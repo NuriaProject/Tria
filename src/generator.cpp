@@ -227,6 +227,7 @@ void Generator::writeDeclareMetatype (const QString &type, QIODevice *device) {
 		return;
 	}
 	
+	this->m_declaredTypes.insert (type);
 	device->write ("Q_DECLARE_METATYPE(");
 	device->write (type.toLatin1 ());
 	device->write (");\n");
