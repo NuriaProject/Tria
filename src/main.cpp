@@ -57,12 +57,14 @@ static void showVersion () {
 
 static void showHelp () {
 	showVersion ();
-	::printf ("Usage: tria [options] <header file>\n"
+	::printf ("Usage: tria [options] <header file> -- <include searchpaths>\n"
 		  "  -o<file>             Write output to <file> (Defaults to stdout)\n"
 		  "  -I<dir>              Add <dir> to the search path for #includes\n"
 		  "  -E                   Only runs the pre-processor of clang\n"
 		  "  -D<macro>[=<value>]  Defines <macro> with a optional <value>\n"
-		  "  -U<macro>            Undefine <macro>\n");
+		  "  -U<macro>            Undefine <macro>\n"
+		  "  -- <path(s)>         Everything after -- is treated like a -I<Path>\n"
+		  "                       This option only exists to work-around QMakes inabilities.\n");
 }
 
 static void parseArguments (int argc, const char **argv, std::vector< std::string > &clangArgs,
@@ -104,6 +106,12 @@ static void parseArguments (int argc, const char **argv, std::vector< std::strin
 				clangArgs.push_back (cur);
 				if (!cur[2]) {
 					nextArgNotInput = true;
+				}
+				
+				break;
+			case '-':
+				for (i++; i < argc; i++) {
+					clangArgs.push_back (std::string ("-I") + argv[i]);
 				}
 				
 				break;
