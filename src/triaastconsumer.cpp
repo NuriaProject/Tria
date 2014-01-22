@@ -201,8 +201,10 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 	// C'tors and D'tors don't have names nor do they really return anything
 	if (ctor) {
 		def.type = ConstructorMethod;
+		def.returnType = classDef.name;
 	} else if (dtor) {
 		def.type = DestructorMethod;
+		def.returnType = QStringLiteral ("void");
 	} else {
 		def.name = llvmToString (decl->getName ());
 		def.returnType = typeName (decl->getResultType ());
