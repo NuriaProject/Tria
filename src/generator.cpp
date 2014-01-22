@@ -235,12 +235,16 @@ void Generator::writeDeclareMetatype (const QString &type, QIODevice *device) {
 
 void Generator::writeMemberConverters (const ClassDef &def, QIODevice *device) {
 	for (const ConversionDef &cur : def.conversions) {
+		if (this->m_avoidedTypes.contains (cur.fromType) ||
+		    this->m_avoidedTypes.contains (cur.toType)) {
+			continue;
+		}
+		
 		if (cur.type == MemberMethod) {
 			writeMemberConverter (cur, device);
 		} else if (cur.type == StaticMethod) {
 			writeStaticConverter (cur, device);
 		}
-		
 		
 	}
 	
@@ -343,6 +347,10 @@ void Generator::writeInstantiorClass (QIODevice *device) {
 }
 
 void Generator::writeConversionRegisterers (const ClassDef &def, QIODevice *device) {
+	if (!def.hasValueSemantics) {
+		return;
+	}
+	
 	for (const ConversionDef &cur : def.conversions) {
 		device->write ("    Nuria::Variant::registerConversion");
 		
@@ -440,7 +448,9 @@ void Generator::writeClassDef (ClassDef &def, QIODevice *device) {
 	}
 	
 	// Converters
-	writeMemberConverters (def, device);
+	if (def.hasValueSemantics) {
+		writeMemberConverters (def, device);
+	}
 	
 	// Prologue
 	device->write ("class Q_DECL_HIDDEN ");
