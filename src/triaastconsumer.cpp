@@ -117,6 +117,11 @@ QString TriaASTConsumer::typeName (const clang::Type *type) {
 		return QString::fromStdString (decl->getQualifiedNameAsString ());
 	}
 	
+	if (type->isEnumeralType ()) {
+		return QString::fromStdString (clang::QualType (type, 0).getAsString ())
+				.remove (QStringLiteral ("enum "));
+	}
+	
 	if (type->isPointerType ()) {
 		const clang::PointerType *ptr = type->getAs< clang::PointerType > ();
 		return typeName (ptr->getPointeeType ()) + QStringLiteral("*");
