@@ -378,6 +378,14 @@ static bool sortByName (const T &lhs, const T &rhs) {
 	return lhs.name < rhs.name;
 }
 
+static bool methodLess (const MethodDef &lhs, const MethodDef &rhs) {
+	if (lhs.name == rhs.name) {
+		return lhs.arguments.length () < rhs.arguments.length ();
+	}
+	
+	return lhs.name < rhs.name;
+}
+
 template< typename Container, typename T >
 static void sortAnnotations (Container &c) {
 	for (T &t : c) {
@@ -424,6 +432,33 @@ static void filterFields (const StringSet &avoid, Variables &fields) {
 	
 }
 
+static int firstOptionalArgument (const MethodDef &method) {
+	int i;
+	for (i = 0; i < method.arguments.length (); i++) {
+		if (method.arguments.at (i).isOptional) {
+			break;
+		}
+		
+	}
+	
+	return i;
+}
+
+static void expandMethodsWithOptionalArgs (Methods &methods) {
+	
+	for (auto it = methods.begin (); it != methods.end (); ++it) {
+		MethodDef cur = *it; // Intentionally not a reference.
+		int totalArgs = cur.arguments.length ();
+		for (int i = firstOptionalArgument (cur); i < totalArgs; i++, ++it) {
+			MethodDef overload = cur;
+			overload.arguments.resize (i);
+			it = methods.insert (it, overload);
+		}
+		
+	}
+	
+}
+
 void Generator::writeClassDef (ClassDef &def, QIODevice *device) {
 	QByteArray prefix = identPrefix (this->m_fileName);
 	
@@ -432,10 +467,15 @@ void Generator::writeClassDef (ClassDef &def, QIODevice *device) {
 	filterMethods (this->m_avoidedTypes, def.methods);
 	filterFields (this->m_avoidedTypes, def.variables);
 	
+	// Expose methods with optional arguments as overloads. Expand first to
+	// catch cases where a class has static and member methods of the same
+	// name.
+	expandMethodsWithOptionalArgs (def.methods);
+	
 	// Sort methods, fields and enums for faster access
 	std::sort (def.annotations.begin (), def.annotations.end (), &sortByName< AnnotationDef >);
 	std::sort (def.bases.begin (), def.bases.end (), &sortByName< BaseDef >);
-	std::sort (def.methods.begin (), def.methods.end (), &sortByName< MethodDef >);
+	std::sort (def.methods.begin (), def.methods.end (), methodLess);
 	std::sort (def.variables.begin (), def.variables.end (), &sortByName< VariableDef >);
 	std::sort (def.enums.begin (), def.enums.end (), &sortByName< EnumDef >);
 	
