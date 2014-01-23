@@ -39,6 +39,9 @@ public:
 private:
 	void declareType (const clang::QualType &type);
 	
+	QString typeName (const clang::Type *type);
+	QString typeName (const clang::QualType &type);
+	
 	BaseDef processBase (clang::CXXBaseSpecifier *specifier);
 	MethodDef processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl);
 	VariableDef processVariable (clang::FieldDecl *decl);

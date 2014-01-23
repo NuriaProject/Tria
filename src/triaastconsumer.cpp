@@ -111,16 +111,21 @@ static inline QString llvmToString (const llvm::StringRef &str) {
 	return QString::fromLatin1 (str.data (), str.size ());
 }
 
-static inline QString typeName (const clang::Type *type) {
+QString TriaASTConsumer::typeName (const clang::Type *type) {
 	const clang::CXXRecordDecl *decl = type->getAsCXXRecordDecl ();
 	if (decl) {
 		return QString::fromStdString (decl->getQualifiedNameAsString ());
 	}
 	
+	if (type->isPointerType ()) {
+		const clang::PointerType *ptr = type->getAs< clang::PointerType > ();
+		return typeName (ptr->getPointeeType ()) + QStringLiteral("*");
+	}
+	
 	return QString::fromStdString (clang::QualType (type, 0).getAsString ());
 }
 
-static inline QString typeName (const clang::QualType &type) {
+QString TriaASTConsumer::typeName (const clang::QualType &type) {
 	return typeName (type.getTypePtr ());
 }
 
