@@ -500,11 +500,28 @@ void Generator::writeClassDef (ClassDef &def, QIODevice *device) {
 	device->write ("_metaObject : public Nuria::MetaObject {\n"
 		       "public:\n");
 	
-	// Generate MetaObject::className
+	// Generate _className and _metaTypeId
 	device->write ("  QByteArray _className () const {\n"
 		       "    return ");
 	device->write (toByteArray (def.name));
 	device->write (";\n"
+		       "  }\n\n"
+		       "  int _metaTypeId () const {\n"
+		       "    return ");
+	if (def.hasValueSemantics) {
+		device->write ("qMetaTypeId< ");
+		device->write (def.name.toLatin1 ());
+		device->write (" > ();\n");
+	} else {
+		device->write ("0;\n");
+	}
+	
+	device->write ("  }\n\n");
+	
+	device->write ("  int _pointerMetaTypeId () const {\n"
+		       "    return qMetaTypeId< ");
+	device->write (def.name.toLatin1 ());
+	device->write (" * > ();\n"
 		       "  }\n\n");
 	
 	// Generate various methods
@@ -940,6 +957,10 @@ void Generator::writeGateCallMethod (const ClassDef &def, QIODevice *device) {
 		       "    switch (method) {\n"
 		       "    case Nuria::MetaObject::GateMethod::ClassName:\n"
 		       "      RESULT(QByteArray) = _className (); break;\n"
+		       "    case Nuria::MetaObject::GateMethod::MetaTypeId:\n"
+		       "      RESULT(int) = _metaTypeId (); break;\n"
+		       "    case Nuria::MetaObject::GateMethod::PointerMetaTypeId:\n"
+		       "      RESULT(int) = _pointerMetaTypeId (); break;\n"
 		       "    case Nuria::MetaObject::GateMethod::BaseClasses:\n"
 		       "      RESULT(QVector< QByteArray >) = _baseClasses (); break;\n"
 		       "    case Nuria::MetaObject::GateMethod::AnnotationCount:\n"
