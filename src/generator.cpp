@@ -875,7 +875,7 @@ void Generator::writeEnumMethods (const ClassDef &def, QIODevice *device) {
 	
 	// QByteArray enumName (int index) const
 	std::function< QByteArray(const EnumDef &) > enumName = [this](const EnumDef &e) {
-		return toByteArray (e.name);
+		return QByteArrayLiteral ("return ") + toByteArray (e.name);
 	};
 	
 	writeGenericFunction (def.enums, device, "QByteArray _enumName (int index)", "QByteArray ()", "index", enumName);

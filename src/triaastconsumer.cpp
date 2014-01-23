@@ -285,10 +285,10 @@ VariableDef TriaASTConsumer::processVariable (clang::FieldDecl *decl) {
 	return def;
 }
 
-EnumDef TriaASTConsumer::processEnum (ClassDef &parent, clang::EnumDecl *decl) {
+EnumDef TriaASTConsumer::processEnum (clang::EnumDecl *decl) {
 	EnumDef def;
 	
-	def.name = parent.name + QStringLiteral ("::") + llvmToString (decl->getName ());
+	def.name = llvmToString (decl->getName ());
 	def.annotations = annotationsFromDecl (decl);
 	
 	for (auto it = decl->enumerator_begin (); it != decl->enumerator_end (); ++it) {
@@ -382,7 +382,7 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 		
 		// 
 		clang::AccessSpecifier access = enumDecl->getAccess ();
-		EnumDef enumDef = processEnum (classDef, enumDecl);
+		EnumDef enumDef = processEnum (enumDecl);
 		
 		if ((access != clang::AS_public && access != clang::AS_none) ||
 		    containsAnnotation (enumDef.annotations, skipAnnotation)) {
@@ -391,7 +391,7 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 		
 		// Store and declare
 		classDef.enums.append (enumDef);
-		this->m_generator->declareType (enumDef.name);
+		this->m_generator->declareType (classDef.name + QStringLiteral ("::") + enumDef.name);
 		
 	}
 	
