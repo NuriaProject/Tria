@@ -186,6 +186,7 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 	
 	clang::CXXConstructorDecl *ctor = llvm::dyn_cast< clang::CXXConstructorDecl > (decl);
 	clang::CXXDestructorDecl *dtor = llvm::dyn_cast< clang::CXXDestructorDecl > (decl);
+	clang::CXXConversionDecl *convDecl = llvm::dyn_cast< clang::CXXConversionDecl > (decl);
 	
 	MethodDef def;
 	
@@ -210,6 +211,9 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 	} else if (dtor) {
 		def.type = DestructorMethod;
 		def.returnType = QStringLiteral ("void");
+	} else if (convDecl) {
+		def.access = clang::AS_private;
+		return def;
 	} else {
 		def.name = llvmToString (decl->getName ());
 		def.returnType = typeName (decl->getResultType ());
@@ -379,9 +383,30 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 		
 	}
 	
+	// Find conversion operators
+	for (auto it = record->conversion_begin (); it != record->conversion_end (); ++it) {
+		clang::CXXConversionDecl *convDecl = llvm::dyn_cast< clang::CXXConversionDecl > (*it);
+		if (!convDecl || convDecl->getAccess () == clang::AS_private ||
+		    convDecl->getAccess () == clang::AS_protected) {
+			continue;
+		}
+		
+		// 
+		ConversionDef conv;
+		conv.type = MemberMethod;
+		conv.isConst = convDecl->isConst ();
+		conv.fromType = classDef.name;
+		conv.toType = typeName (convDecl->getConversionType ());
+		conv.methodName = QStringLiteral ("operator ") + conv.toType;
+		
+		declareType (convDecl->getConversionType ());
+		classDef.conversions.append (conv);
+		
+	}
+	
 	// Find enums
 	for (auto it = record->decls_begin (); it != record->decls_end (); ++it) {
-		clang::EnumDecl *enumDecl = llvm::dyn_cast< clang::EnumDecl >(*it);
+		clang::EnumDecl *enumDecl = llvm::dyn_cast< clang::EnumDecl > (*it);
 		if (!enumDecl) {
 			continue;
 		}
