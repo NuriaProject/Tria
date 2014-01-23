@@ -1048,7 +1048,7 @@ static QByteArray getPrototype (const ClassDef &def, const MethodDef &m) {
 
 QByteArray Generator::methodToCallback (const ClassDef &def, const MethodDef &m) {
 	QByteArray cb;
-	if (m.type == ConstructorMethod) {
+	if (m.hasOptionalArguments || m.type == ConstructorMethod) {
 		QByteArray args;
 		QByteArray call;
 		
@@ -1064,10 +1064,31 @@ QByteArray Generator::methodToCallback (const ClassDef &def, const MethodDef &m)
 		args.chop (2); // Remove trailing ", "
 		call.chop (2);
 		
-		cb = QByteArrayLiteral ("Nuria::Callback::fromLambda ([](") + args +
-		     QByteArrayLiteral (") { return new ") + def.name.toLatin1 ();
+		cb = QByteArrayLiteral ("Nuria::Callback::fromLambda ([instance](") + args +
+		     QByteArrayLiteral (") { ");
+		if (m.type == ConstructorMethod) {
+			cb.append ("return new ");
+			cb.append (def.name.toLatin1 ());
+		} else {
+			if (m.returnType != "void") {
+				cb.append ("return ");
+			}
+			
+			if (m.type == StaticMethod) {
+				cb.append (def.name.toLatin1 ());
+				cb.append ("::");
+			} else {
+				cb.append ("reinterpret_cast< ");
+				cb.append (def.name.toLatin1 ());
+				cb.append (" * > (instance)->");
+				
+			}
+			
+			cb.append (m.name.toLatin1 ());
+		}
 		
-		if (!args.isEmpty ()) {
+		
+		if (!args.isEmpty () || m.type != ConstructorMethod) {
 			cb.append ("(");
 			cb.append (call);
 			cb.append (")");

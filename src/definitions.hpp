@@ -69,6 +69,7 @@ struct MethodDef {
 	QString returnType;
 	Variables arguments;
 	Annotations annotations;
+	bool hasOptionalArguments = false;
 	
 };
 

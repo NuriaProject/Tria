@@ -231,6 +231,7 @@ MethodDef TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDe
 		var.type = typeName (param->getType ());
 		var.isOptional = param->hasDefaultArg ();
 		var.isConst = param->getType ().getQualifiers ().hasConst ();
+		def.hasOptionalArguments = var.isOptional;
 		
 		// Ignore methods with arguments without value-semantics
 		if (!hasTypeValueSemantics (param->getType ())) {
