@@ -861,6 +861,18 @@ void Generator::writeFieldMethods (const ClassDef &def, QIODevice *device) {
 	
 	writeFieldGeneric (def.variables, device, "QByteArray _fieldName (int index)", "QByteArray ()", fieldName);
 	
+	// Nuria::MetaField::Access fieldAccess (int index) const
+	std::function< QByteArray(const VariableDef &) > fieldAccess = [this](const VariableDef &var) {
+		if (var.getter.isEmpty () == var.setter.isEmpty ()) {
+			return QByteArrayLiteral ("Nuria::MetaField::ReadWrite");
+		}
+		
+		return QByteArrayLiteral ("Nuria::MetaField::ReadOnly");
+	};
+	
+	writeFieldGeneric (def.variables, device, "Nuria::MetaField::Access _fieldAccess (int index)",
+			   "Nuria::MetaField::NoAccess", fieldAccess);
+	
 	// QByteArray fieldType (int index) const
 	std::function< QByteArray(const VariableDef &) > fieldType = [this](const VariableDef &var) {
 		return toByteArray (var.type);
@@ -997,6 +1009,8 @@ void Generator::writeGateCallMethod (const ClassDef &def, QIODevice *device) {
 		       "      const QVariant &value = *reinterpret_cast< QVariant * > (argData[1]);\n"
 		       "      RESULT(bool) = _fieldWrite (index, argData[0], value);\n"
 		       "    } break;\n"
+		       "    case Nuria::MetaObject::GateMethod::FieldAccess:\n"
+		       "      RESULT(Nuria::MetaField::Access) = _fieldAccess (index); break;\n"
 		       "    case Nuria::MetaObject::GateMethod::EnumName:\n"
 		       "      RESULT(QByteArray) = _enumName (index); break;\n"
 		       "    case Nuria::MetaObject::GateMethod::EnumElementCount:\n"
