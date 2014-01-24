@@ -250,6 +250,7 @@ int main (int argc, const char **argv) {
 	arguments.push_back ("c++");
 	arguments.push_back ("-fPIE");
 	arguments.push_back ("-DTRIA_RUN");
+	arguments.push_back ("-std=c++11");
 	
 	// Parse arguments
 	Options options;

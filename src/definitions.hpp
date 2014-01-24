@@ -34,7 +34,17 @@ static const char *methodTypeStr[] = { "Constructor", "Destructor",
 				       "Method", "Static" };
 static const char *accessStr[] = { "public", "protected", "private", "none" };
 
+enum AnnotationType {
+	IntrospectAnnotation,
+	SkipAnnotation,
+	ReadAnnotation,
+	WriteAnnotation,
+	RequireAnnotation,
+	CustomAnnotation,
+};
+
 struct AnnotationDef {
+	AnnotationType type;
 	QString name;
 	QString value;
 	bool valueIsString = false;
@@ -50,12 +60,14 @@ struct VariableDef {
 	QString type;
 	
 	QString getter;
+	QString setterArgName;
 	QString setter;
 	
 	Annotations annotations;
 	
 	bool isConst = false;
 	bool isOptional = false;
+	bool setterReturnsBool = false;
 };
 
 typedef QVector< VariableDef > Variables;

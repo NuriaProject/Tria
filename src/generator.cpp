@@ -386,11 +386,7 @@ static bool methodLess (const MethodDef &lhs, const MethodDef &rhs) {
 	return lhs.name < rhs.name;
 }
 
-template< typename Container, typename T >
-static void sortAnnotations (Container &c) {
-	for (T &t : c) {
-		std::sort (t.annotations.begin (), t.annotations.end (), &sortByName< AnnotationDef >);
-	}
+static void filterAnnotations (Annotations &annotations) {
 	
 }
 
@@ -473,15 +469,13 @@ void Generator::writeClassDef (ClassDef &def, QIODevice *device) {
 	expandMethodsWithOptionalArgs (def.methods);
 	
 	// Sort methods, fields and enums for faster access
-	std::sort (def.annotations.begin (), def.annotations.end (), &sortByName< AnnotationDef >);
 	std::sort (def.bases.begin (), def.bases.end (), &sortByName< BaseDef >);
 	std::sort (def.methods.begin (), def.methods.end (), methodLess);
 	std::sort (def.variables.begin (), def.variables.end (), &sortByName< VariableDef >);
 	std::sort (def.enums.begin (), def.enums.end (), &sortByName< EnumDef >);
 	
-	// Sort annotations in everything ..
-	sortAnnotations< Methods, MethodDef > (def.methods);
-	sortAnnotations< Variables, VariableDef > (def.variables);
+	// 
+//	filterAnnotations (def.annotations);
 	
 	for (EnumDef &cur : def.enums) {
 		std::sort (cur.values.begin (), cur.values.end ());
@@ -580,14 +574,20 @@ static void writeGenericSwitch (const Container &container, QIODevice *device, c
 		device->write (variable);
 		device->write (") {\n");
 		
-		for (int i = 0; i < container.length (); i++) {
-			const T &cur = container.at (i);
+		int j = 0;
+		for (const T &cur : container) {
+			QByteArray insertion = func (cur);
+			
+			if (insertion.isEmpty ()) {
+				continue;
+			}
 			
 			device->write ("    case ");
-			device->write (QByteArray::number (i));
+			device->write (QByteArray::number (j));
 			device->write (": ");
-			device->write (func (cur));
+			device->write (insertion);
 			device->write (";\n");
+			j++;
 			
 		}
 		
@@ -667,6 +667,10 @@ void Generator::writeCountMethods (const ClassDef &def, QIODevice *device) {
 }
 
 static QByteArray writeAnnotationValue (const AnnotationDef &def) {
+	if (def.type != CustomAnnotation) {
+		return QByteArray ();
+	}
+	
 	if (def.value.isEmpty ()) {
 		return QByteArrayLiteral ("return QVariant ()");
 	} else if (def.valueIsString) {
@@ -701,7 +705,12 @@ static std::function< QByteArray(const T &) > iterateAnnotationsFunc (Sub func) 
 
 void Generator::writeAnnotationMethods (const ClassDef &def, QIODevice *device) {
 	// Nuria::MetaObject::annotationName
-	std::function< QByteArray(const AnnotationDef &) > annotationName = [this](const AnnotationDef &a) {
+	std::function< QByteArray(const AnnotationDef &) > annotationName =
+			[this](const AnnotationDef &a) -> QByteArray {
+		if (a.type != CustomAnnotation) {
+			return QByteArray ();
+		}
+		
                 return QByteArrayLiteral ("return ") + toByteArray (a.name);
         };
 	
@@ -861,17 +870,7 @@ void Generator::writeFieldMethods (const ClassDef &def, QIODevice *device) {
 	
 	// QVariant fieldRead (int index, void *instance) const
 	std::function< QByteArray(const VariableDef &) > fieldRead = [&def, this](const VariableDef &var) {
-		QByteArray code = QByteArrayLiteral ("QVariant::fromValue (reinterpret_cast< ") +
-				  def.name.toLatin1 () + QByteArrayLiteral (" * > (instance)->") ;
-		if (!var.getter.isEmpty ()) {
-			code.append (var.getter.toLatin1 ());
-			code.append (" ()");
-		} else {
-			code.append (var.name.toLatin1 ());
-		}
-		
-		code.append (")");
-		return code;
+		return generateGetter (def, var);
 	};
 	
 	writeFieldGeneric (def.variables, device, "QVariant _fieldRead (int index, void *instance)",
@@ -883,7 +882,7 @@ void Generator::writeFieldMethods (const ClassDef &def, QIODevice *device) {
 	};
 	
 	writeGenericFunction (def.variables, device,
-		      "bool _fieldWrite (int index, void *instance, const QVariant &value)",
+		      "bool _fieldWrite (int index, void *__instance, const QVariant &__value)",
 		      "false", "index", fieldWrite);
 	
 }
@@ -1147,48 +1146,89 @@ QByteArray Generator::methodToCallback (const ClassDef &def, const MethodDef &m)
 	return cb;
 }
 
-QByteArray Generator::generateSetter (const ClassDef &def, const VariableDef &var) {
-	QByteArray setter;
-	QByteArray toValue;
-	
-	toValue.append ("value.value< ");
-	toValue.append (var.type.toLatin1 ());
-	toValue.append (" > ()");
-	
-	setter.append ("reinterpret_cast< ");
-	setter.append (def.name.toLatin1 ());
-	setter.append (" * > (instance)->");
-	
-	if (!var.setter.isEmpty ()) {
-		setter.append (var.setter.toLatin1 ());
-		setter.append (" (");
-		setter.append (toValue);
-		setter.append (");");
-	} else {
-		setter.append (var.name.toLatin1 ());
-		setter.append (" = ");
-		setter.append (toValue);
-		setter.append (";");
+static int findAnnotationByType (const Annotations &annotations, AnnotationType type) {
+	for (int i = 0; i < annotations.length (); i++) {
+		if (annotations.at (i).type == type) {
+			return i;
+		}
+		
 	}
 	
-	QByteArray code;
-	code.append ("\n"
-		     "      if (value.userType () != qMetaTypeId< ");
-	code.append (var.type.toLatin1 ());
-	code.append (" > ()) {\n"
-		     "        QVariant v = Nuria::Variant::convert (value, qMetaTypeId< ");
-	code.append (var.type.toLatin1 ());
-	code.append (" > ());\n"
-		     "        if (!v.isValid ()) { return false; }\n"
-		     "        ");
-	code.append (QByteArray (setter).replace ("value.", "v."));
-	code.append ("\n"
-		     "        return true;\n"
-		     "      }\n"
-		     "      ");
-	code.append (setter);
-	code.append ("\n"
-		     "      return true");
+	return -1;
+}
+
+static QString findRequirement (const Annotations &annotations) {
+	int at = findAnnotationByType (annotations, RequireAnnotation);
+	if (at < 0) {
+		return QString ();
+	}
 	
+	return annotations.at (at).value;
+}
+
+QByteArray Generator::generateGetter (const ClassDef &def, const VariableDef &var) {
+	QByteArray code = QByteArrayLiteral ("QVariant::fromValue (reinterpret_cast< ") +
+			  def.name.toLatin1 () + QByteArrayLiteral (" * > (instance)->") ;
+	if (!var.getter.isEmpty ()) {
+		code.append (var.getter.toLatin1 ());
+		code.append (" ()");
+	} else {
+		code.append (var.name.toLatin1 ());
+	}
+	
+	code.append (")");
 	return code;
+}
+
+QByteArray Generator::generateSetter (const ClassDef &def, const VariableDef &var) {
+	QString requirement = findRequirement (var.annotations);
+	
+	if (var.setter.isEmpty () && !var.getter.isEmpty ()) {
+		return "return false";
+	} else if (var.setter.isEmpty () && requirement.isEmpty ()) {
+		QString s ("\n"
+			   "      if (__value.userType () != qMetaTypeId< %1 > ()) {\n"
+			   "        QVariant __v = Nuria::Variant::convert (__value, qMetaTypeId< %1 > ());\n"
+			   "        if (!__v.isValid ()) { return false; }\n"
+			   "        reinterpret_cast< %2 * > (__instance)->%3 = __v.value< %1 > ();\n"
+			   "      } else {\n"
+			   "        reinterpret_cast< %2 * > (__instance)->%3 = __value.value< %1 > ();\n"
+			   "      } return true");
+		return s.arg (var.type, def.name, var.name).toLatin1 ();
+	} else if (var.setter.isEmpty () && !requirement.isEmpty ()) {
+		QString s ("{\n"
+			   "      QVariant __v = (__value.userType () != qMetaTypeId< %1 > ())\n"
+			   "      ? Nuria::Variant::convert (__value, qMetaTypeId< %1 > ()) : __value;\n"
+			   "      if (__v.userType () != qMetaTypeId< %1 > () && !__v.isValid ()) { return false; }\n"
+			   "      %1 %4 = __v.value< %1 > ();\n"
+			   "      if (!(%5)) { return false; }\n"
+			   "      reinterpret_cast< %2 * > (__instance)->%3 = %4;\n"
+			   "    } return true");
+		return s.arg (var.type, def.name, var.name, var.name, requirement).toLatin1 ();
+	} else if (!var.setter.isEmpty () && requirement.isEmpty ()) {
+		QString s ("\n"
+		           "      if (__value.userType () != qMetaTypeId< %1 > ()) {\n"
+		           "        QVariant __v = Nuria::Variant::convert (__value, qMetaTypeId< %1 > ());\n"
+		           "        if (!__v.isValid ()) { return false; }\n"
+		           "        reinterpret_cast< %2 * > (__instance)->%3 (__v.value< %1 > ());\n"
+		           "      } else {\n"
+		           "        %4reinterpret_cast< %2 * > (__instance)->%3 (__value.value< %1 > ());\n"
+		           "      } return true");
+		QString ret (var.setterReturnsBool ? "return" : "" );
+	        return s.arg (var.type, def.name, var.setter, ret).toLatin1 ();
+	} else if (!var.setter.isEmpty () && !requirement.isEmpty ()) {
+		QString s ("{\n"
+			   "      QVariant __v = (__value.userType () != qMetaTypeId< %1 > ())\n"
+			   "      ? Nuria::Variant::convert (__value, qMetaTypeId< %1 > ()) : __value;\n"
+			   "      if (__v.userType () != qMetaTypeId< %1 > () && !__v.isValid ()) { return false; }\n"
+			   "      %1 %4 = __v.value< %1 > ();\n"
+			   "      if (!(%5)) { return false; }\n"
+			   "      %6reinterpret_cast< %2 * > (__instance)->%3 (%4);\n"
+			   "    } return true");
+		QString ret (var.setterReturnsBool ? "return" : "" );
+		return s.arg (var.type, def.name, var.setter, var.setterArgName,
+			      requirement, ret).toLatin1 ();
+	}
+	
+	return QByteArray ();
 }

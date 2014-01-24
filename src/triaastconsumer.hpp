@@ -38,16 +38,22 @@ public:
 	void HandleTagDeclDefinition (clang::TagDecl *decl) override;
 	
 private:
+	void reportError (clang::SourceLocation loc, const QByteArray &info);
+	void reportWarning (clang::SourceLocation loc, const QByteArray &info);
+	void reportMessage (clang::DiagnosticsEngine::Level level, clang::SourceLocation loc,
+			    const QByteArray &info);
+	
 	void declareType (const clang::QualType &type);
 	
 	QString typeName (const clang::Type *type);
 	QString typeName (const clang::QualType &type);
 	
 	BaseDef processBase (clang::CXXBaseSpecifier *specifier);
-	MethodDef processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl);
+	bool registerReadWriteMethod (ClassDef &classDef, MethodDef &def, clang::CXXMethodDecl *decl);
+	void processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl);
 	VariableDef processVariable (clang::FieldDecl *decl);
+	void processEnum (ClassDef &classDef, clang::EnumDecl *decl);
 	void processConversion (ClassDef &classDef, clang::CXXConversionDecl *convDecl);
-	EnumDef processEnum (clang::EnumDecl *decl);
 	
 	Generator *m_generator;
 	clang::CompilerInstance &m_compiler;

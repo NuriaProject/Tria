@@ -92,6 +92,7 @@ private:
 				std::function< QByteArray(const EnumDef &) > func);
 	
 	QByteArray methodToCallback (const ClassDef &def, const MethodDef &m);
+	QByteArray generateGetter (const ClassDef &def, const VariableDef &var);
 	QByteArray generateSetter (const ClassDef &def, const VariableDef &var);
 	
 	// 
