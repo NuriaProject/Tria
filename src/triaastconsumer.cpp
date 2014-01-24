@@ -314,6 +314,27 @@ EnumDef TriaASTConsumer::processEnum (clang::EnumDecl *decl) {
 	return def;
 }
 
+void TriaASTConsumer::processConversion (ClassDef &classDef, clang::CXXConversionDecl *convDecl) {
+	if (!hasTypeValueSemantics (convDecl->getConversionType ())) {
+		return;
+	}
+	
+	// Make sure this isn't NURIA_SKIP'd
+	if (containsAnnotation (annotationsFromDecl (convDecl), skipAnnotation)) {
+		return;
+	}
+	
+	ConversionDef conv;
+	conv.type = MemberMethod;
+	conv.isConst = convDecl->isConst ();
+	conv.fromType = classDef.name;
+	conv.toType = typeName (convDecl->getConversionType ());
+	conv.methodName = QStringLiteral ("operator ") + conv.toType;
+	
+	declareType (convDecl->getConversionType ());
+	classDef.conversions.append (conv);
+}
+
 void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	static const llvm::StringRef qMetaTypeIdName ("QMetaTypeId");
 	
@@ -397,15 +418,7 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 		}
 		
 		// 
-		ConversionDef conv;
-		conv.type = MemberMethod;
-		conv.isConst = convDecl->isConst ();
-		conv.fromType = classDef.name;
-		conv.toType = typeName (convDecl->getConversionType ());
-		conv.methodName = QStringLiteral ("operator ") + conv.toType;
-		
-		declareType (convDecl->getConversionType ());
-		classDef.conversions.append (conv);
+		processConversion (classDef, convDecl);
 		
 	}
 	

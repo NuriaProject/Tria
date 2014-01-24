@@ -24,6 +24,7 @@
 #include "definitions.hpp"
 
 namespace clang {
+class CXXConversionDecl;
 class StaticAssertDecl;
 class CXXMethodDecl;
 }
@@ -45,6 +46,7 @@ private:
 	BaseDef processBase (clang::CXXBaseSpecifier *specifier);
 	MethodDef processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl);
 	VariableDef processVariable (clang::FieldDecl *decl);
+	void processConversion (ClassDef &classDef, clang::CXXConversionDecl *convDecl);
 	EnumDef processEnum (clang::EnumDecl *decl);
 	
 	Generator *m_generator;
