@@ -57,7 +57,6 @@ static bool containsAnnotation (const Annotations &list, const QString &name) {
 	return false;
 }
 
-
 static QString annotationValue (const QString &name, AnnotationType &type) {
 	if (name == introspectAnnotation) {
 		type = IntrospectAnnotation;
@@ -156,6 +155,10 @@ QString TriaASTConsumer::typeName (const clang::Type *type) {
 	if (type->isPointerType ()) {
 		const clang::PointerType *ptr = type->getAs< clang::PointerType > ();
 		return typeName (ptr->getPointeeType ()) + QStringLiteral("*");
+	}
+	
+	if (type->isBooleanType ()) {
+		return QStringLiteral("bool");
 	}
 	
 	return QString::fromStdString (clang::QualType (type, 0).getAsString ());
@@ -371,6 +374,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 		def.name = llvmToString (decl->getName ());
 		def.returnType = typeName (decl->getResultType ());
 		def.type = decl->isStatic () ? StaticMethod : MemberMethod;
+		def.returnTypeIsPod = decl->getResultType ().isPODType (*this->m_context);
 		
 		// Also register result-type in the meta-system later on!
 		declareType (decl->getResultType ());
@@ -412,7 +416,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 	}
 	
 	// Final check if this is a conversion method
-	if (canConvert && !containsAnnotation (def.annotations, skipAnnotation) &&
+	if (canConvert && 
 	    (def.type == ConstructorMethod ||
 	     (def.type == StaticMethod && def.name.startsWith (fromMethod)) ||
 	     (def.type == MemberMethod && def.name.startsWith (toMethod)))) {
@@ -432,7 +436,6 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 	
 	// 
 	classDef.methods.append (def);
-	return;
 }
 
 VariableDef TriaASTConsumer::processVariable (clang::FieldDecl *decl) {

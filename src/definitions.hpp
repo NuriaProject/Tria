@@ -82,6 +82,7 @@ struct MethodDef {
 	Variables arguments;
 	Annotations annotations;
 	bool hasOptionalArguments = false;
+	bool returnTypeIsPod = false;
 	
 };
 

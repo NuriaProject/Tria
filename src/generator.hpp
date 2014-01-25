@@ -83,7 +83,8 @@ private:
 	
 	void writeMethodGeneric (const Methods &methods, QIODevice *device, const QByteArray &signature,
 				 const QByteArray &defaultResult,
-				 std::function< QByteArray(const MethodDef &) > func);
+				 std::function< QByteArray(const MethodDef &) > fun
+				 , const QString &prologue = QString());
 	void writeFieldGeneric (const Variables &variables, QIODevice *device, const QByteArray &signature,
 				 const QByteArray &defaultResult,
 				 std::function< QByteArray(const VariableDef &) > func);
@@ -91,7 +92,8 @@ private:
 				const QByteArray &defaultResult,
 				std::function< QByteArray(const EnumDef &) > func);
 	
-	QByteArray methodToCallback (const ClassDef &def, const MethodDef &m);
+	QByteArray generateMethodArgumentTester (const ClassDef &def, const MethodDef &m);
+	QByteArray methodToCallback (const ClassDef &def, const MethodDef &m, bool safe);
 	QByteArray generateGetter (const ClassDef &def, const VariableDef &var);
 	QByteArray generateSetter (const ClassDef &def, const VariableDef &var);
 	

@@ -463,6 +463,8 @@ void Generator::writeClassDef (ClassDef &def, QIODevice *device) {
 	filterMethods (this->m_avoidedTypes, def.methods);
 	filterFields (this->m_avoidedTypes, def.variables);
 	
+	// 
+	
 	// Expose methods with optional arguments as overloads. Expand first to
 	// catch cases where a class has static and member methods of the same
 	// name.
@@ -599,11 +601,18 @@ static void writeGenericSwitch (const Container &container, QIODevice *device, c
 template< typename Container, typename T >
 static void writeGenericFunction (const Container &container, QIODevice *device, const QByteArray &signature,
 				  const QByteArray &defaultResult, const QByteArray &variable,
-				  std::function< QByteArray(const T &) > func) {
+				  std::function< QByteArray(const T &) > func,
+				  const QString &prologue = QString()) {
 	
 	device->write ("  ");
 	device->write (signature);
 	device->write (" const {\n");
+	
+	if (!prologue.isEmpty ()) {
+		device->write ("    ");
+		device->write (prologue.toLatin1 ());
+		device->write ("\n");
+	}
 	
 	writeGenericSwitch (container, device, variable, func);
 	
@@ -754,6 +763,43 @@ void Generator::writeAnnotationMethods (const ClassDef &def, QIODevice *device) 
 	
 }
 
+static void methodDefToArgumentString (const MethodDef &m, QString &parameter, QString &arguments) {
+	for (int i = 0; i < m.arguments.length (); i++) {
+		const VariableDef &cur = m.arguments.at (i);
+		parameter.append (cur.type);
+		parameter.append (" ");
+		parameter.append (cur.name);
+		arguments.append (cur.name);
+		
+		if (i + 1 < m.arguments.length ()) {
+			parameter.append (", ");
+			arguments.append (", ");
+		}
+		
+	}
+	
+}
+
+static int findAnnotationByType (const Annotations &annotations, AnnotationType type) {
+	for (int i = 0; i < annotations.length (); i++) {
+		if (annotations.at (i).type == type) {
+			return i;
+		}
+		
+	}
+	
+	return -1;
+}
+
+static QString findRequirement (const Annotations &annotations) {
+	int at = findAnnotationByType (annotations, RequireAnnotation);
+	if (at < 0) {
+		return QString ();
+	}
+	
+	return annotations.at (at).value;
+}
+
 void Generator::writeMethodMethods (const ClassDef &def, QIODevice *device) {
 	
 	// QByteArray methodName (int index) const
@@ -842,13 +888,29 @@ void Generator::writeMethodMethods (const ClassDef &def, QIODevice *device) {
 	writeMethodGeneric (def.methods, device, "QVector< QByteArray > _methodArgumentTypes (int index)", 
 			    "QVector< QByteArray > ()", argumentTypes);
 	
-	// Callback methodCallback (void *instance, int index) const
-	std::function< QByteArray(const MethodDef &) > argumentCallback = [&def, this](const MethodDef &m) {
-		return methodToCallback (def, m);
+	// Callback methodUnsafeCallback (void *instance, int index) const
+	std::function< QByteArray(const MethodDef &) > unsafeCallback = [&def, this](const MethodDef &m) {
+		return methodToCallback (def, m, false);
 	};
 	
-	writeMethodGeneric (def.methods, device, "Nuria::Callback _methodCallback (void *instance, int index)", 
-			    "Nuria::Callback ()", argumentCallback);
+	writeMethodGeneric (def.methods, device, "Nuria::Callback _methodUnsafeCallback (void *__instance, int index)", 
+			    "Nuria::Callback ()", unsafeCallback);
+	
+	// Callback methodCallback (void *instance, int index) const
+	std::function< QByteArray(const MethodDef &) > callback = [&def, this](const MethodDef &m) {
+		return methodToCallback (def, m, true);
+	};
+	
+	writeMethodGeneric (def.methods, device, "Nuria::Callback _methodCallback (void *__instance, int index)", 
+			    "Nuria::Callback ()", callback);
+	
+	// bool methodArgumentTest (void *instance, int index) const
+	std::function< QByteArray(const MethodDef &) > argumentTest = [&def, this](const MethodDef &m) {
+		return generateMethodArgumentTester (def, m);
+	};
+	
+	writeMethodGeneric (def.methods, device, "Nuria::Callback _methodArgumentTest (void *__instance, int index)", 
+			    "Nuria::Callback ()", argumentTest);
 	
 }
 
@@ -998,6 +1060,10 @@ void Generator::writeGateCallMethod (const ClassDef &def, QIODevice *device) {
 		       "      RESULT(QVector< QByteArray >) = _methodArgumentTypes (index); break;\n"
 		       "    case Nuria::MetaObject::GateMethod::MethodCallback:\n"
 		       "      RESULT(Nuria::Callback) = _methodCallback (additional, index); break;\n"
+		       "    case Nuria::MetaObject::GateMethod::MethodUnsafeCallback:\n"
+		       "      RESULT(Nuria::Callback) = _methodUnsafeCallback (additional, index); break;\n"
+		       "    case Nuria::MetaObject::GateMethod::MethodArgumentTest:\n"
+		       "      RESULT(Nuria::Callback) = _methodArgumentTest (additional, index); break;\n"
 		       "    case Nuria::MetaObject::GateMethod::FieldName:\n"
 		       "      RESULT(QByteArray) = _fieldName (index); break;\n"
 		       "    case Nuria::MetaObject::GateMethod::FieldType:\n"
@@ -1028,12 +1094,13 @@ void Generator::writeGateCallMethod (const ClassDef &def, QIODevice *device) {
 
 void Generator::writeMethodGeneric (const Methods &methods, QIODevice *device, const QByteArray &signature,
 				    const QByteArray &defaultResult,
-				    std::function< QByteArray(const MethodDef &) > func) {
+				    std::function< QByteArray(const MethodDef &) > func,
+				    const QString &prologue) {
 	std::function< QByteArray(const MethodDef &) > returner = [&func] (const MethodDef &m) {
 		return QByteArrayLiteral ("return ") + func (m);
 	};
 	
-	writeGenericFunction (methods, device, signature, defaultResult, "index", returner);
+	writeGenericFunction (methods, device, signature, defaultResult, "index", returner, prologue);
 	
 }
 
@@ -1060,124 +1127,102 @@ void Generator::writeEnumGeneric (const Enums &enums, QIODevice *device, const Q
 	
 }
 
-static QByteArray getPrototype (const ClassDef &def, const MethodDef &m) {
-	QByteArray prototype;
-	prototype.append (m.returnType.toLatin1 ());
-	prototype.append ("(");
+static QString generateMethodChecker (const ClassDef &def, const MethodDef &m, const QString &requirement,
+				      bool nonVoid, const QString &parameter, const QString &arguments,
+				      const QString &onSuccess, const QString &onFailure) {
+	QString checkerName = QStringLiteral ("_Check_") + m.name + QString::number (m.arguments.length ());
+	QString requirementCall = requirement;
+	QString prologue;
 	
 	if (m.type == MemberMethod) {
-		prototype.append (def.name.toLatin1 ());
-		prototype.append ("::");
+		prologue = QString ("struct %1 : public %2 { bool _nuria_check (%3) { return (%4); } };\n")
+			   .arg (checkerName, def.name, parameter, requirement);
+		
+		requirementCall = QString ("reinterpret_cast< %1 * > (__instance)->_nuria_check (%2)")
+				  .arg (checkerName, arguments);
 	}
 	
-	prototype.append ("*)(");
-	for (int i = 0; i < m.arguments.length (); i++) {
-		prototype.append (m.arguments.at (i).type);
-		prototype.append ((i + 1 < m.arguments.length ()) ? "," : "");
+	// 
+	if (nonVoid) {
+		return QString ("%1return (%2) ? %3 : %4")
+			.arg (prologue, requirementCall, onSuccess, onFailure);
 	}
-	prototype.append (")");
 	
-	return prototype;
+	return QString ("%1if (%2) %3").arg (prologue, requirementCall, onSuccess);
+	
 }
 
-QByteArray Generator::methodToCallback (const ClassDef &def, const MethodDef &m) {
-	QByteArray cb;
-	if (m.hasOptionalArguments || m.type == ConstructorMethod) {
-		QByteArray args;
-		QByteArray call;
+QByteArray Generator::generateMethodArgumentTester (const ClassDef &def, const MethodDef &m) {
+	QString requirement = findRequirement (m.annotations);
+	
+	// 
+	if (requirement.isEmpty ()) {
+		return QByteArrayLiteral ("Nuria::Callback ()");
+	}
+	
+	// 
+	QString parameter;
+	QString arguments;
+	
+	methodDefToArgumentString (m, parameter, arguments);
+	
+	// 
+	static const QString success = QStringLiteral("true");
+	static const QString failure = QStringLiteral("false");
+	QString check = generateMethodChecker (def, m, requirement, true, parameter,
+					       arguments, success, failure);
+	
+	return QString ("Nuria::Callback::fromLambda ([__instance](%1){ %2; })")
+			.arg (parameter, check).toLatin1 ();
+	
+}
+
+QByteArray Generator::methodToCallback (const ClassDef &def, const MethodDef &m, bool safe) {
+	QString requirement = findRequirement (m.annotations);
+	
+	// 
+	QString parameter;
+	QString arguments;
+	methodDefToArgumentString (m, parameter, arguments);
+	
+	// 
+	bool nonVoid = (m.returnType != "void");
+	QString inner;
+	if (m.type == ConstructorMethod) {
+		inner = QString ("new %1 (%2)").arg (def.name, arguments);
+	} else if (m.type == MemberMethod) {
+		inner = QString ("reinterpret_cast< %1 * > (__instance)->%2 (%3)")
+			.arg (def.name, m.name, arguments);
+	} else if (m.type == StaticMethod) {
+		inner = QString ("%1::%2 (%3)").arg (def.name, m.name, arguments);
+	}
+	
+	// 
+	QString check;
+	if (safe && !requirement.isEmpty ()) {
+		static const QString qVariant = QStringLiteral("QVariant ()");
+		QString fromValue;
 		
-		for (const VariableDef &def : m.arguments) {
-			args.append (def.type);
-			args.append (" ");
-			args.append (def.name);
-			args.append (", ");
-			call.append (def.name);
-			call.append (", ");
-		}
-		
-		args.chop (2); // Remove trailing ", "
-		call.chop (2);
-		
-		cb = QByteArrayLiteral ("Nuria::Callback::fromLambda ([instance](") + args +
-		     QByteArrayLiteral (") { ");
-		if (m.type == ConstructorMethod) {
-			cb.append ("return new ");
-			cb.append (def.name.toLatin1 ());
+		if (nonVoid) {
+			fromValue = QStringLiteral("QVariant::fromValue (") + inner + QStringLiteral (")");
 		} else {
-			if (m.returnType != "void") {
-				cb.append ("return ");
-			}
-			
-			if (m.type == StaticMethod) {
-				cb.append (def.name.toLatin1 ());
-				cb.append ("::");
-			} else {
-				cb.append ("reinterpret_cast< ");
-				cb.append (def.name.toLatin1 ());
-				cb.append (" * > (instance)->");
-				
-			}
-			
-			cb.append (m.name.toLatin1 ());
+			fromValue = inner;
 		}
 		
+		check = generateMethodChecker (def, m, requirement, nonVoid, parameter, 
+					       arguments, fromValue, qVariant);
 		
-		if (!args.isEmpty () || m.type != ConstructorMethod) {
-			cb.append ("(");
-			cb.append (call);
-			cb.append (")");
-		}
-		
-		cb.append ("; })");
-		return cb;
+	} else if (nonVoid) {
+		check = QStringLiteral ("return ") + inner;
+	} else {
+		check = inner;
 	}
 	
-	// Member or static method
-	cb.append ("Nuria::Callback (");
+	// 
+	QString catcher (m.type == MemberMethod ? "__instance" : "");
+	return QString ("Nuria::Callback::fromLambda ([%1](%2) { %3; })")
+			.arg (catcher, parameter, check).toLatin1 ();
 	
-	if (m.type == MemberMethod) {
-		cb.append ("reinterpret_cast< ");
-		cb.append (def.name.toLatin1 ());
-		cb.append (" * > (instance), ");
-	}
-	
-	QByteArray prototype = getPrototype (def, m);
-	
-	if (m.isConst) {
-		cb.append ("reinterpret_cast< ");
-		cb.append (prototype);
-		cb.append (" > (");
-	}
-	
-	cb.append ("(");
-	cb.append (prototype);
-	cb.append (m.isConst ? "const" : "");
-	cb.append (")&");
-	cb.append (def.name.toLatin1 ());
-	cb.append ("::");
-	cb.append (m.name.toLatin1 ());
-	cb.append (m.isConst ? "))" : ")");
-	return cb;
-}
-
-static int findAnnotationByType (const Annotations &annotations, AnnotationType type) {
-	for (int i = 0; i < annotations.length (); i++) {
-		if (annotations.at (i).type == type) {
-			return i;
-		}
-		
-	}
-	
-	return -1;
-}
-
-static QString findRequirement (const Annotations &annotations) {
-	int at = findAnnotationByType (annotations, RequireAnnotation);
-	if (at < 0) {
-		return QString ();
-	}
-	
-	return annotations.at (at).value;
 }
 
 QByteArray Generator::generateGetter (const ClassDef &def, const VariableDef &var) {
@@ -1196,7 +1241,22 @@ QByteArray Generator::generateGetter (const ClassDef &def, const VariableDef &va
 
 QByteArray Generator::generateSetter (const ClassDef &def, const VariableDef &var) {
 	QString requirement = findRequirement (var.annotations);
+	QString prologue;
 	
+	// 
+	if (!requirement.isEmpty ()) {
+		QString checkerName = QStringLiteral ("_Check_") + var.name;
+		QString varName = (var.setter.isEmpty ()) ? var.name : var.setterArgName;
+		
+		prologue = QString ("struct %1 : public %2 { bool _nuria_check (%3 %4) { return (%5); } };")
+			   .arg (checkerName, def.name, var.type, varName, requirement);
+		
+		requirement = QString ("reinterpret_cast< %1 * > (__instance)->_nuria_check (%2)")
+			      .arg (checkerName, varName);
+		
+	}
+	
+	// 
 	if (var.setter.isEmpty () && !var.getter.isEmpty ()) {
 		return "return false";
 	} else if (var.setter.isEmpty () && requirement.isEmpty ()) {
@@ -1215,10 +1275,12 @@ QByteArray Generator::generateSetter (const ClassDef &def, const VariableDef &va
 			   "      ? Nuria::Variant::convert (__value, qMetaTypeId< %1 > ()) : __value;\n"
 			   "      if (__v.userType () != qMetaTypeId< %1 > () && !__v.isValid ()) { return false; }\n"
 			   "      %1 %4 = __v.value< %1 > ();\n"
-			   "      if (!(%5)) { return false; }\n"
+			   "      %6\n"
+			   "      if (!%5) { return false; }\n"
 			   "      reinterpret_cast< %2 * > (__instance)->%3 = %4;\n"
 			   "    } return true");
-		return s.arg (var.type, def.name, var.name, var.name, requirement).toLatin1 ();
+		return s.arg (var.type, def.name, var.name, var.name,
+			      requirement, prologue).toLatin1 ();
 	} else if (!var.setter.isEmpty () && requirement.isEmpty ()) {
 		QString s ("\n"
 		           "      if (__value.userType () != qMetaTypeId< %1 > ()) {\n"
@@ -1236,12 +1298,13 @@ QByteArray Generator::generateSetter (const ClassDef &def, const VariableDef &va
 			   "      ? Nuria::Variant::convert (__value, qMetaTypeId< %1 > ()) : __value;\n"
 			   "      if (__v.userType () != qMetaTypeId< %1 > () && !__v.isValid ()) { return false; }\n"
 			   "      %1 %4 = __v.value< %1 > ();\n"
-			   "      if (!(%5)) { return false; }\n"
+			   "      %7\n"
+			   "      if (!%5) { return false; }\n"
 			   "      %6reinterpret_cast< %2 * > (__instance)->%3 (%4);\n"
 			   "    } return true");
 		QString ret (var.setterReturnsBool ? "return" : "" );
 		return s.arg (var.type, def.name, var.setter, var.setterArgName,
-			      requirement, ret).toLatin1 ();
+			      requirement, ret, prologue).toLatin1 ();
 	}
 	
 	return QByteArray ();
