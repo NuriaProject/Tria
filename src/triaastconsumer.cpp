@@ -44,6 +44,7 @@ TriaASTConsumer::TriaASTConsumer (clang::CompilerInstance &compiler, const llvm:
 
 void TriaASTConsumer::Initialize (clang::ASTContext &ctx) {
 	this->m_context = &ctx;
+	this->m_mainFileId = this->m_compiler.getSourceManager ().getMainFileID ();
 }
 
 static bool containsAnnotation (const Annotations &list, const QString &name) {
@@ -553,6 +554,30 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 		
 	}
 	
+	// Does this type have a public c'tor which takes no arguments,
+	// a public copy-ctor and assignment operator?
+	classDef.hasDefaultCtor = record->hasDefaultConstructor () ||
+				  record->hasUserProvidedDefaultConstructor ();
+	classDef.hasCopyCtor = record->hasCopyConstructorWithConstParam () ||
+			       record->hasUserDeclaredCopyConstructor ();
+	classDef.hasAssignmentOperator = record->hasCopyAssignmentWithConstParam () ||
+					 record->hasUserDeclaredCopyAssignment ();
+	
+	classDef.hasValueSemantics = (classDef.hasDefaultCtor &&
+				      classDef.hasCopyCtor &&
+				      classDef.hasAssignmentOperator);
+	
+	if (!classDef.hasValueSemantics) {
+		this->m_generator->avoidType (classDef.name);
+	}
+	
+	// Ignore further information if the type isn't in the main file
+	clang::SourceLocation location = decl->getSourceRange ().getBegin ();
+	clang::SourceLocation fileLocation = this->m_compiler.getSourceManager ().getExpansionLoc (location);
+	if (this->m_compiler.getSourceManager ().getFileID (fileLocation) != this->m_mainFileId) {
+		return;
+	}
+	
 	// Parent classes
 	for (auto it = record->bases_begin (); it != record->bases_end (); ++it) {
 		classDef.bases.append (processBase (it));
@@ -595,23 +620,6 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 			processEnum (classDef, enumDecl);
 		}
 		
-	}
-	
-	// Does this type have a public c'tor which takes no arguments,
-	// a public copy-ctor and assignment operator?
-	classDef.hasDefaultCtor = record->hasDefaultConstructor () ||
-				  record->hasUserProvidedDefaultConstructor ();
-	classDef.hasCopyCtor = record->hasCopyConstructorWithConstParam () ||
-			       record->hasUserDeclaredCopyConstructor ();
-	classDef.hasAssignmentOperator = record->hasCopyAssignmentWithConstParam () ||
-					 record->hasUserDeclaredCopyAssignment ();
-	
-	classDef.hasValueSemantics = (classDef.hasDefaultCtor &&
-				      classDef.hasCopyCtor &&
-				      classDef.hasAssignmentOperator);
-	
-	if (!classDef.hasValueSemantics) {
-		this->m_generator->avoidType (classDef.name);
 	}
 	
 	// Done.

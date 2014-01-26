@@ -58,6 +58,7 @@ private:
 	Generator *m_generator;
 	clang::CompilerInstance &m_compiler;
 	clang::ASTContext *m_context = nullptr;
+	clang::FileID m_mainFileId;
 	
 };
 
