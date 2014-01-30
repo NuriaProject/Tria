@@ -38,6 +38,9 @@ public:
 	void HandleTagDeclDefinition (clang::TagDecl *decl) override;
 	
 private:
+	Annotations annotationsFromDecl (clang::Decl *decl);
+	AnnotationDef parseNuriaAnnotate (const QString &data);
+	
 	void reportError (clang::SourceLocation loc, const QByteArray &info);
 	void reportWarning (clang::SourceLocation loc, const QByteArray &info);
 	void reportMessage (clang::DiagnosticsEngine::Level level, clang::SourceLocation loc,

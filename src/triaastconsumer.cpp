@@ -29,6 +29,7 @@
 #include "generator.hpp"
 
 static const QString introspectAnnotation = QStringLiteral ("nuria_introspect");
+static const QString customAnnotation = QStringLiteral ("nuria_annotate:");
 static const QString skipAnnotation = QStringLiteral ("nuria_skip");
 static const QString readAnnotation = QStringLiteral ("nuria_read:");
 static const QString writeAnnotation = QStringLiteral ("nuria_write:");
@@ -84,12 +85,47 @@ static QString annotationValue (const QString &name, AnnotationType &type) {
 	return QString ();
 }
 
-static Annotations annotationsFromDecl (clang::Decl *decl) {
-	static const QString specialPrefix = QStringLiteral ("nuria_annotate:");
-	Annotations list;
+
+static int findEndOfName (const QString &data, int from) {
+	for (int i = from + 1; i < data.length (); i++) {
+		if (data.at (i) == QLatin1Char ('\\') && data.at (i) == QLatin1Char ('"')) {
+			i++;
+		} else if (data.at (i) == QLatin1Char ('"')) {
+			return i;
+		}
+		
+	}
 	
-	AnnotationDef current;
-	bool nextIsValue = false;
+	return -1;
+}
+
+AnnotationDef TriaASTConsumer::parseNuriaAnnotate (const QString &data) {
+	AnnotationDef def;
+	
+	int namePos = customAnnotation.length ();
+	int nameLen = findEndOfName (data, namePos + 1) - namePos;
+	int valuePos = data.indexOf (QLatin1Char ('='), namePos + nameLen) + 1;
+	
+	// 
+	QString valueData = data.mid (valuePos);
+	if (valueData.startsWith (QLatin1Char ('"'))) {
+		valueData = valueData.mid (1, valueData.length () - 2);
+		def.valueType = QMetaType::QString;
+	} else {
+		def.valueType = typeOfAnnotationValue (valueData);
+	}
+	
+	// 
+	def.name = data.mid (namePos + 1, nameLen - 1);
+	def.type = CustomAnnotation;
+	def.value = valueData;
+	
+	return def;
+}
+
+
+Annotations TriaASTConsumer::annotationsFromDecl (clang::Decl *decl) {
+	Annotations list;
 	
 	const clang::AttrVec &attributes = decl->getAttrs ();
 	for (const clang::Attr *attr : attributes) {
@@ -102,36 +138,21 @@ static Annotations annotationsFromDecl (clang::Decl *decl) {
 		llvm::StringRef annotation = cur->getAnnotation ();
 		QString data = QString::fromUtf8 (annotation.data (), annotation.size ());
 		
-		if (nextIsValue) {
-			if (data.startsWith (QLatin1Char ('"'))) {
-				data = data.mid (1, data.length () - 2);
-				current.valueIsString = true;
-			}
-			
-			current.value = data;
-			list.append (current);
-			
-			current = AnnotationDef ();
-			nextIsValue = false;
-			
-		} else if (data.startsWith (specialPrefix)) {
-			// Next will be the value
-			current.name = data.mid (specialPrefix.length ());
-			current.type = CustomAnnotation;
-			nextIsValue = true;
+		if (data.startsWith (customAnnotation)) {
+			list.prepend (parseNuriaAnnotate (data));
 			
 		} else {
 			// Annotation without a additional value
 			AnnotationDef def;
 			def.name = data;
 			def.value = annotationValue (data, def.type);
-			list.append (def);
+			list.prepend (def);
 		}
 		
 	}
 	
 	// 
-	std::sort (list.begin (), list.end (), [](const AnnotationDef &l, const AnnotationDef &r) {
+	std::stable_sort (list.begin (), list.end (), [](const AnnotationDef &l, const AnnotationDef &r) {
 		return l.name < r.name;
 	});
 	
@@ -446,7 +467,7 @@ VariableDef TriaASTConsumer::processVariable (clang::FieldDecl *decl) {
 	def.type = typeName (decl->getType ());
 	def.name = llvmToString (decl->getName ());
 	def.annotations = annotationsFromDecl (decl);
-	
+
 	if (def.access != clang::AS_public) {
 		return def;
 	}
