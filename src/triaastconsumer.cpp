@@ -174,7 +174,8 @@ QString TriaASTConsumer::typeDeclName (const clang::NamedDecl *decl, const clang
 	
 	// Declarations of templates
 	const clang::TemplateArgumentList &args = templ->getTemplateArgs ();
-	if (args.size () < 1 || args.get (0).getKind () == clang::TemplateArgument::Integral) {
+	
+	if (args.size () < 1) {
 		return name;
 	}
 	
@@ -182,6 +183,11 @@ QString TriaASTConsumer::typeDeclName (const clang::NamedDecl *decl, const clang
 	QStringList typeNames;
 	for (int i = 0; i < args.size (); i++) {
 		const clang::TemplateArgument &arg = args.get (i);
+		
+		if (arg.getKind () != clang::TemplateArgument::Type) {
+			return name;
+		}
+		
 		typeNames.append (typeName (arg.getAsType ()));
 	}
 	
