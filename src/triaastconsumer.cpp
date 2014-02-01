@@ -213,14 +213,11 @@ QString TriaASTConsumer::typeName (const clang::Type *type) {
 		return typeName (ptr->getPointeeType ());
 	}
 	
-	if (type->isEnumeralType ()) {
+	// Clang says that "QMetaObject::Call" is a enum, but then prepends 'struct '.
+	if (type->isEnumeralType () || type->isStructureType ()) {
 		return QString::fromStdString (clang::QualType (type, 0).getAsString ())
+				.remove (QStringLiteral ("struct "))
 				.remove (QStringLiteral ("enum "));
-	}
-	
-	if (type->isStructureType ()) {
-		return QString::fromStdString (clang::QualType (type, 0).getAsString ())
-				.remove (QStringLiteral ("struct "));
 	}
 	
 	if (type->isPointerType ()) {
