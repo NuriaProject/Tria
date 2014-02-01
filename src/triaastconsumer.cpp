@@ -441,10 +441,17 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 		// Ignore.
 		return;
 	} else {
+		clang::QualType resultType = decl->getResultType ();
 		def.name = llvmToString (decl->getName ());
-		def.returnType = typeName (decl->getResultType ());
+		def.returnType = typeName (resultType);
 		def.type = decl->isStatic () ? StaticMethod : MemberMethod;
-		def.returnTypeIsPod = decl->getResultType ().isPODType (*this->m_context);
+		def.returnTypeIsPod = resultType.isPODType (*this->m_context);
+		
+		// Ignore method if the result is a const pointer.
+		if (resultType.getTypePtr ()->isPointerType () &&
+		    resultType.getTypePtr ()->getAs< clang::PointerType > ()->getPointeeType ().isConstQualified ()) {
+			return;
+		}
 		
 		// Also register result-type in the meta-system later on!
 		declareType (decl->getResultType ());
@@ -739,7 +746,7 @@ void TriaASTConsumer::declareType (const clang::QualType &type) {
 		return;
 	}
 	
-	// FIXME: Check if we actually can declare it
+	// 
 	this->m_generator->declareType (name);
 	
 }
