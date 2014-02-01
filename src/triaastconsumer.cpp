@@ -464,6 +464,11 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 		var.isConst = param->getType ().getQualifiers ().hasConst ();
 		def.hasOptionalArguments = var.isOptional;
 		
+		// Invent a name for unnamed arguments
+		if (var.name.isEmpty ()) {
+			var.name = QStringLiteral ("__nuria_arg") + QString::number (i);
+		}
+		
 		// Ignore methods with arguments without value-semantics
 		if (!hasTypeValueSemantics (param->getType ())) {
 			this->m_generator->avoidType (var.type);
