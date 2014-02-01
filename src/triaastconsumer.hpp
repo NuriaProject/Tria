@@ -48,6 +48,7 @@ private:
 	
 	void declareType (const clang::QualType &type);
 	
+	QString typeDeclName (const clang::NamedDecl *decl, const clang::Type *type);
 	QString typeName (const clang::Type *type);
 	QString typeName (const clang::QualType &type);
 	

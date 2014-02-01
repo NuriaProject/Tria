@@ -163,15 +163,58 @@ static inline QString llvmToString (const llvm::StringRef &str) {
 	return QString::fromLatin1 (str.data (), str.size ());
 }
 
+QString TriaASTConsumer::typeDeclName (const clang::NamedDecl *decl, const clang::Type *type) {
+	const clang::ClassTemplateSpecializationDecl *templ =
+			llvm::dyn_cast< clang::ClassTemplateSpecializationDecl > (decl);
+	QString name = QString::fromStdString (decl->getQualifiedNameAsString ());
+	
+	if (!templ) {
+		return name;
+	}
+	
+	// Declarations of templates
+	const clang::TemplateArgumentList &args = templ->getTemplateArgs ();
+	if (args.size () < 1 || args.get (0).getKind () == clang::TemplateArgument::Integral) {
+		return name;
+	}
+	
+	// 
+	QStringList typeNames;
+	for (int i = 0; i < args.size (); i++) {
+		const clang::TemplateArgument &arg = args.get (i);
+		typeNames.append (typeName (arg.getAsType ()));
+	}
+	
+	//
+	return name + QStringLiteral ("< ") + typeNames.join (QStringLiteral (", ")) + QStringLiteral (" >");
+	
+}
+
 QString TriaASTConsumer::typeName (const clang::Type *type) {
 	const clang::CXXRecordDecl *decl = type->getAsCXXRecordDecl ();
+	const clang::TypedefType *typeDef = type->getAs< clang::TypedefType > ();
+	
+	if (typeDef) {
+		return typeDeclName (typeDef->getDecl ()->getCanonicalDecl (), type);
+	}
+	
 	if (decl) {
-		return QString::fromStdString (decl->getQualifiedNameAsString ());
+		return typeDeclName (decl, type);
+	}
+	
+	if (type->isReferenceType ()) {
+		const clang::ReferenceType *ptr = type->getAs< clang::ReferenceType > ();
+		return typeName (ptr->getPointeeType ());
 	}
 	
 	if (type->isEnumeralType ()) {
 		return QString::fromStdString (clang::QualType (type, 0).getAsString ())
 				.remove (QStringLiteral ("enum "));
+	}
+	
+	if (type->isStructureType ()) {
+		return QString::fromStdString (clang::QualType (type, 0).getAsString ())
+				.remove (QStringLiteral ("struct "));
 	}
 	
 	if (type->isPointerType ()) {
@@ -196,6 +239,8 @@ static bool hasTypeValueSemantics (const clang::Type *type) {
 	}
 	
 	const clang::CXXRecordDecl *record = type->getAsCXXRecordDecl ();
+	record = (!record || record->isThisDeclarationADefinition ()) ? record : record->getDefinition ();
+	
 	if (!record) {
 		// FIXME: This can break for typedef's
 		return true;

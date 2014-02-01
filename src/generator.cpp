@@ -386,10 +386,6 @@ static bool methodLess (const MethodDef &lhs, const MethodDef &rhs) {
 	return lhs.name < rhs.name;
 }
 
-static void filterAnnotations (Annotations &annotations) {
-	
-}
-
 static bool checkArgumentsForAvoidedTypes (const StringSet &avoid, const Variables &args) {
 	for (const VariableDef &cur : args) {
 		if (avoid.contains (cur.type)) {
@@ -826,7 +822,7 @@ void Generator::writeMethodMethods (const ClassDef &def, QIODevice *device) {
 	
 	// QByteArray methodReturnType (int index) const
 	std::function< QByteArray(const MethodDef &) > returnType = [this](const MethodDef &def) {
-		return toByteArray (def.returnType);
+		return toByteArray (QString (def.returnType).remove (QLatin1Char (' ')));
 	};
 	
 	writeMethodGeneric (def.methods, device, "QByteArray _methodReturnType (int index)", 
@@ -869,7 +865,8 @@ void Generator::writeMethodMethods (const ClassDef &def, QIODevice *device) {
 			arr.append ("{ ");
 			
 			for (int i = 0; i < count; i++) {
-				arr.append (toByteArray (def.arguments.at (i).type));
+				QString argType = def.arguments.at (i).type;
+				arr.append (toByteArray (argType.remove (QLatin1Char (' '))));
 				
 				if (i + 1 < count) {
 					arr.append (", ");
