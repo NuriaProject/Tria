@@ -234,12 +234,7 @@ QString TriaASTConsumer::typeName (const clang::QualType &type) {
 	return typeName (type.getTypePtr ());
 }
 
-static bool hasTypeValueSemantics (const clang::Type *type) {
-	if (type->isPointerType ()) {
-		return true;
-	}
-	
-	const clang::CXXRecordDecl *record = type->getAsCXXRecordDecl ();
+bool TriaASTConsumer::hasRecordValueSemantics (const clang::CXXRecordDecl *record) {
 	record = (!record || record->isThisDeclarationADefinition ()) ? record : record->getDefinition ();
 	
 	if (!record) {
@@ -256,24 +251,47 @@ static bool hasTypeValueSemantics (const clang::Type *type) {
 			continue;
 		}
 		
-		// Make sure the ctor or copy-ctor is publicly visible and not deleted.
+		// 
 		(cur->isDefaultConstructor () ? seenDefaultCtor : seenCopyCtor) = true;
 		clang::AccessSpecifier access = cur->getAccess ();
 		
+		// Make sure the (copy-)ctor or assignment operator is publicly visible and not deleted.
 		if (cur->isDeleted () || access == clang::AS_private || access == clang::AS_protected) {
 			return false;
 		}
 		
 	}
 	
-	// Probably has value-semantics
 	// FIXME: Also check for a assignment operator.
-	return ((seenDefaultCtor || record->needsImplicitDefaultConstructor ()) &&
-		(seenCopyCtor || record->needsImplicitCopyConstructor ()));
+	if (!(seenDefaultCtor || record->needsImplicitDefaultConstructor ()) &&
+	    !(seenCopyCtor || record->needsImplicitCopyConstructor ())) {
+		return false;
+	}
+	
+	// Check that base-classes offer value-semantics
+	for (auto it = record->bases_begin (); it != record->bases_end (); ++it) {
+		const clang::CXXBaseSpecifier &base = *it;
+		clang::CXXRecordDecl *baseRecord = base.getType ().getTypePtr ()->getAsCXXRecordDecl ();
+		if (!hasRecordValueSemantics (baseRecord)) {
+			return false;
+		}
+		
+	}
+	
+	// 
+	return true;
+}
+
+bool TriaASTConsumer::hasTypeValueSemantics (const clang::Type *type) {
+	if (type->isPointerType ()) {
+		return true;
+	}
+	
+	return hasRecordValueSemantics (type->getAsCXXRecordDecl ());
 	
 }
 
-static bool hasTypeValueSemantics (const clang::QualType &type) {
+bool TriaASTConsumer::hasTypeValueSemantics (const clang::QualType &type) {
 	return hasTypeValueSemantics (type.getTypePtr ());
 }
 
@@ -288,8 +306,7 @@ BaseDef TriaASTConsumer::processBase (clang::CXXBaseSpecifier *specifier) {
 }
 
 static int findField (ClassDef &classDef, const QString &name) {
-	int i;
-	for (i = 0; i < classDef.variables.length (); i++) {
+	for (int i = 0; i < classDef.variables.length (); i++) {
 		if (classDef.variables.at (i).name == name) {
 			return i;
 		}
@@ -595,7 +612,8 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	}
 	
 	// 
-	if (!hasTypeValueSemantics (record->getTypeForDecl ())) {
+	bool typeHasValueSemantics = hasTypeValueSemantics (record->getTypeForDecl ());
+	if (!typeHasValueSemantics) {
 		this->m_generator->avoidType (typeName (record->getTypeForDecl ()));
 	}
 	
@@ -642,9 +660,8 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	classDef.hasAssignmentOperator = record->hasCopyAssignmentWithConstParam () ||
 					 record->hasUserDeclaredCopyAssignment ();
 	
-	classDef.hasValueSemantics = (classDef.hasDefaultCtor &&
-				      classDef.hasCopyCtor &&
-				      classDef.hasAssignmentOperator);
+	classDef.hasValueSemantics = classDef.hasDefaultCtor && classDef.hasCopyCtor &&
+				     classDef.hasAssignmentOperator && typeHasValueSemantics;
 	
 	if (!classDef.hasValueSemantics) {
 		this->m_generator->avoidType (classDef.name);

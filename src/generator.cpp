@@ -223,7 +223,7 @@ void Generator::writeDeclareMetatypeForClass (const ClassDef &def, QIODevice *de
 }
 
 void Generator::writeDeclareMetatype (const QString &type, QIODevice *device) {
-	if (this->m_declaredTypes.contains (type)) {
+	if (this->m_declaredTypes.contains (type) || this->m_avoidedTypes.contains (type)) {
 		return;
 	}
 	

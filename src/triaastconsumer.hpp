@@ -52,6 +52,10 @@ private:
 	QString typeName (const clang::Type *type);
 	QString typeName (const clang::QualType &type);
 	
+	bool hasRecordValueSemantics(const clang::CXXRecordDecl *record);
+	bool hasTypeValueSemantics(const clang::QualType &type);
+	bool hasTypeValueSemantics(const clang::Type *type);
+	
 	BaseDef processBase (clang::CXXBaseSpecifier *specifier);
 	bool registerReadWriteMethod (ClassDef &classDef, MethodDef &def, clang::CXXMethodDecl *decl);
 	void processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl);
