@@ -35,6 +35,9 @@ public:
 	/** Adds \a theClass. */
 	void addClassDefinition (const ClassDef &theClass);
 	
+	/** Returns all class definitions */
+	QVector< ClassDef > classDefintions () const;
+	
 	/** Registers \a type as already Q_DECLARE_METATYPE'd. */
 	void addDeclaredType (const QString &type);
 	
@@ -96,6 +99,7 @@ private:
 	QByteArray methodToCallback (const ClassDef &def, const MethodDef &m, bool safe);
 	QByteArray generateGetter (const ClassDef &def, const VariableDef &var);
 	QByteArray generateSetter (const ClassDef &def, const VariableDef &var);
+	void cleanUpClassDef (ClassDef &def);
 	
 	// 
 	QString m_fileName;

@@ -36,6 +36,11 @@ Generator::Generator (const QString &fileName)
 
 void Generator::addClassDefinition (const ClassDef &theClass) {
 	this->m_classes.append (theClass);
+	cleanUpClassDef (this->m_classes.last ());
+}
+
+QVector< ClassDef > Generator::classDefintions () const {
+	return this->m_classes;
 }
 
 void Generator::addDeclaredType (const QString &type) {
@@ -453,32 +458,6 @@ static void expandMethodsWithOptionalArgs (Methods &methods) {
 
 void Generator::writeClassDef (ClassDef &def, QIODevice *device) {
 	QByteArray prefix = identPrefix (this->m_fileName);
-	
-	// Filter methods and fields which can't be exposed as their type(s)
-	// doesn't have value-semantics.
-	filterMethods (this->m_avoidedTypes, def.methods);
-	filterFields (this->m_avoidedTypes, def.variables);
-	
-	// 
-	
-	// Expose methods with optional arguments as overloads. Expand first to
-	// catch cases where a class has static and member methods of the same
-	// name.
-	expandMethodsWithOptionalArgs (def.methods);
-	
-	// Sort methods, fields and enums for faster access
-	std::sort (def.bases.begin (), def.bases.end (), &sortByName< BaseDef >);
-	std::sort (def.methods.begin (), def.methods.end (), methodLess);
-	std::sort (def.variables.begin (), def.variables.end (), &sortByName< VariableDef >);
-	std::sort (def.enums.begin (), def.enums.end (), &sortByName< EnumDef >);
-	
-	// 
-//	filterAnnotations (def.annotations);
-	
-	for (EnumDef &cur : def.enums) {
-		std::sort (cur.values.begin (), cur.values.end ());
-		std::sort (cur.annotations.begin (), cur.annotations.end (), &sortByName< AnnotationDef >);
-	}
 	
 	// Converters
 	if (def.hasValueSemantics) {
@@ -1305,4 +1284,30 @@ QByteArray Generator::generateSetter (const ClassDef &def, const VariableDef &va
 	}
 	
 	return QByteArray ();
+}
+
+void Generator::cleanUpClassDef (ClassDef &def) {
+	
+	// Filter methods and fields which can't be exposed as their type(s)
+	// doesn't have value-semantics.
+	filterMethods (this->m_avoidedTypes, def.methods);
+	filterFields (this->m_avoidedTypes, def.variables);
+	
+	// Expose methods with optional arguments as overloads. Expand first to
+	// catch cases where a class has static and member methods of the same
+	// name.
+	expandMethodsWithOptionalArgs (def.methods);
+	
+	// Sort methods, fields and enums for faster access
+	std::sort (def.bases.begin (), def.bases.end (), &sortByName< BaseDef >);
+	std::sort (def.methods.begin (), def.methods.end (), methodLess);
+	std::sort (def.variables.begin (), def.variables.end (), &sortByName< VariableDef >);
+	std::sort (def.enums.begin (), def.enums.end (), &sortByName< EnumDef >);
+	
+	// 
+	for (EnumDef &cur : def.enums) {
+		std::sort (cur.values.begin (), cur.values.end ());
+		std::sort (cur.annotations.begin (), cur.annotations.end (), &sortByName< AnnotationDef >);
+	}
+	
 }
