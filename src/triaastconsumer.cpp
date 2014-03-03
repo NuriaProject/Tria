@@ -26,7 +26,7 @@
 #include <QDebug>
 
 #include "definitions.hpp"
-#include "generator.hpp"
+#include "defs.hpp"
 
 static const QString introspectAnnotation = QStringLiteral ("nuria_introspect");
 static const QString customAnnotation = QStringLiteral ("nuria_annotate:");
@@ -36,8 +36,8 @@ static const QString writeAnnotation = QStringLiteral ("nuria_write:");
 static const QString requireAnnotation = QStringLiteral ("nuria_require:");
 
 TriaASTConsumer::TriaASTConsumer (clang::CompilerInstance &compiler, const llvm::StringRef &fileName,
-				  Generator *generator)
-	: m_generator (generator) , m_compiler (compiler)
+				  Definitions *definitions)
+	: m_definitions (definitions) , m_compiler (compiler)
 {
 	Q_UNUSED(fileName)
 	
@@ -85,6 +85,9 @@ static QString annotationValue (const QString &name, AnnotationType &type) {
 	return QString ();
 }
 
+QMetaType::Type TriaASTConsumer::typeOfAnnotationValue (const QString &valueData) {
+	return QMetaType::QVariant;
+}
 
 static int findEndOfName (const QString &data, int from) {
 	for (int i = from + 1; i < data.length (); i++) {
@@ -442,7 +445,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 	    !resultTypeHasValueSemantics || containsAnnotation (def.annotations, skipAnnotation)) {
 		
 		if (!resultTypeHasValueSemantics) {
-			this->m_generator->avoidType (def.returnType);
+			this->m_definitions->avoidType (def.returnType);
 		}
 		
 		return;
@@ -493,7 +496,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 		
 		// Ignore methods with arguments without value-semantics
 		if (!hasTypeValueSemantics (param->getType ())) {
-			this->m_generator->avoidType (var.type);
+			this->m_definitions->avoidType (var.type);
 			return;
 		}
 		
@@ -551,7 +554,7 @@ VariableDef TriaASTConsumer::processVariable (clang::FieldDecl *decl) {
 		declareType (decl->getType ());
 	} else {
 		reportWarning (decl->getLocation (), "Type of variable doesn't have value-semantics, skipping.");
-		this->m_generator->avoidType (def.type);
+		this->m_definitions->avoidType (def.type);
 	}
 	
 	return def;
@@ -578,7 +581,7 @@ void TriaASTConsumer::processEnum (ClassDef &classDef, clang::EnumDecl *decl) {
 	
 	// Store and declare
 	classDef.enums.append (def);
-	this->m_generator->declareType (classDef.name + QStringLiteral ("::") + def.name);
+	this->m_definitions->declareType (classDef.name + QStringLiteral ("::") + def.name);
 	
 }
 
@@ -614,7 +617,7 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	// 
 	bool typeHasValueSemantics = hasTypeValueSemantics (record->getTypeForDecl ());
 	if (!typeHasValueSemantics) {
-		this->m_generator->avoidType (typeName (record->getTypeForDecl ()));
+		this->m_definitions->avoidType (typeName (record->getTypeForDecl ()));
 	}
 	
 	// Check if this is a QMetaTypeId specialization (Result of a Q_DECLARE_METATYPE)
@@ -624,7 +627,7 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 		const clang::TemplateArgumentList &list = templ->getTemplateArgs ();
 		if (list.size () == 1) {
 			QString name = typeName (list.get (0).getAsType ());
-			this->m_generator->addDeclaredType (name);
+			this->m_definitions->addDeclaredType (name);
 		}
 		
 		return;
@@ -664,7 +667,7 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 				     classDef.hasAssignmentOperator && typeHasValueSemantics;
 	
 	if (!classDef.hasValueSemantics) {
-		this->m_generator->avoidType (classDef.name);
+		this->m_definitions->avoidType (classDef.name);
 	}
 	
 	// Ignore further information if the type isn't in the main file
@@ -719,7 +722,7 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	}
 	
 	// Done.
-	this->m_generator->addClassDefinition (classDef);
+	this->m_definitions->addClassDefinition (classDef);
 	
 }
 
@@ -762,6 +765,6 @@ void TriaASTConsumer::declareType (const clang::QualType &type) {
 	}
 	
 	// 
-	this->m_generator->declareType (name);
+	this->m_definitions->declareType (name);
 	
 }

@@ -18,125 +18,101 @@
 #ifndef DEFINITIONS_HPP
 #define DEFINITIONS_HPP
 
-#include <clang/Basic/Specifiers.h>
-#include <QStringList>
-#include <QString>
-#include <QVector>
+#include "defs.hpp"
 
-enum MethodType {
-	ConstructorMethod = 0,
-	DestructorMethod,
-	MemberMethod,
-	StaticMethod
-};
+#include <functional>
 
-static const char *methodTypeStr[] = { "Constructor", "Destructor",
-				       "Method", "Static" };
-static const char *accessStr[] = { "public", "protected", "private", "none" };
+#include <QMap>
+#include <QSet>
 
-enum AnnotationType {
-	IntrospectAnnotation,
-	SkipAnnotation,
-	ReadAnnotation,
-	WriteAnnotation,
-	RequireAnnotation,
-	CustomAnnotation,
-};
+class QIODevice;
+typedef QSet< QString > StringSet;
 
-struct AnnotationDef {
-	AnnotationType type;
-	QString name;
-	QString value;
-	bool valueIsString = false;
-	int index = -1;
-};
-
-typedef QVector< AnnotationDef > Annotations;
-
-struct VariableDef {
-	clang::AccessSpecifier access;
+class Definitions {
+public:
+	Definitions (const QString &fileName);
 	
-	QString name;
-	QString type;
+	/** Adds \a theClass. */
+	void addClassDefinition (const ClassDef &theClass);
 	
-	QString getter;
-	QString setterArgName;
-	QString setter;
+	/** Returns all class definitions */
+	QVector< ClassDef > classDefintions () const;
 	
-	Annotations annotations;
+	/** Registers \a type as already Q_DECLARE_METATYPE'd. */
+	void addDeclaredType (const QString &type);
 	
-	bool isConst = false;
-	bool isOptional = false;
-	bool setterReturnsBool = false;
-};
-
-typedef QVector< VariableDef > Variables;
-
-struct MethodDef {
-	clang::AccessSpecifier access;
-	MethodType type;
-	bool isVirtual;
-	bool isConst;
-	QString name;
-	QString returnType;
-	Variables arguments;
-	Annotations annotations;
-	bool hasOptionalArguments = false;
-	bool returnTypeIsPod = false;
+	/** Tells the generator to generate a metatype declaration. */
+	void declareType (const QString &type);
 	
-};
-
-typedef QVector< MethodDef > Methods;
-
-struct ConversionDef {
-	QString methodName;
-	MethodType type;
-	QString fromType;
-	QString toType;
-	bool isConst;
-};
-
-typedef QVector< ConversionDef > Conversions;
-
-struct BaseDef {
-	clang::AccessSpecifier access;
-	bool isVirtual;
-	QString name;
+	/** Takes \a type out of the to-be-declared list. */
+	void undeclareType (const QString &type);
 	
-};
-
-typedef QVector< BaseDef > Bases;
-
-struct EnumDef {
-	QString name;
-	QStringList values;
-	Annotations annotations;
+	/** Will avoid \a type when generating code. */
+	void avoidType (const QString &type);
 	
-};
-
-typedef QVector< EnumDef > Enums;
-
-struct ClassDef {
-	clang::AccessSpecifier access;
-	Bases bases;
-	QString name;
-	Variables variables;
-	Methods methods;
-	Enums enums;
-	Conversions conversions;
-	Annotations annotations;
+	/** Generates code and writes it to \a device. */
+	bool generate (QIODevice *device);
 	
-	bool hasValueSemantics;
-	bool hasDefaultCtor;
-	bool hasCopyCtor;
-	bool hasAssignmentOperator;
+private:
+	
+	/** Registers \a string and returns its offset. */
+	int registerString (const QString &string);
+	QByteArray stringAcessor (const QString &string);
+	QByteArray toByteArray (const QString &string);
+	
+	void writeHeader (QIODevice *device);
+	void writeStringBuffer (QIODevice *device);
+	
+	void writeRegisterMetatypeForClass (const ClassDef &def, QIODevice *device);
+	void writeRegisterMetatype (const QString &type, QIODevice *device);
+	void writeDeclareMetatypeForClass (const ClassDef &def, QIODevice *device);
+	void writeDeclareMetatype (const QString &type, QIODevice *device);
+	void writeMemberConverters (const ClassDef &def, QIODevice *device);
+	void writeMemberConverter (const ConversionDef &def, QIODevice *device);
+	void writeStaticConverter (const ConversionDef &def, QIODevice *device);
+	
+	void writeInstantiorClass (QIODevice *device);
+	void writeConversionRegisterers (const ClassDef &def, QIODevice *device);
+	
+	void writeClassDef (ClassDef &def, QIODevice *device);
+	void writeDestroyMethod (const ClassDef &def, QIODevice *device);
+	void writeBasesMethod (const ClassDef &def, QIODevice *device);
+	void writeCountMethods (const ClassDef &def, QIODevice *device);
+	void writeAnnotationMethods (const ClassDef &def, QIODevice *device);
+	void writeMethodMethods (const ClassDef &def, QIODevice *device);
+	void writeFieldMethods (const ClassDef &def, QIODevice *device);
+	void writeEnumMethods (const ClassDef &def, QIODevice *device);
+	void writeGateCallMethod (const ClassDef &def, QIODevice *device);
+	
+	void writeMethodGeneric (const Methods &methods, QIODevice *device, const QByteArray &signature,
+				 const QByteArray &defaultResult,
+				 std::function< QByteArray(const MethodDef &) > fun
+				 , const QString &prologue = QString());
+	void writeFieldGeneric (const Variables &variables, QIODevice *device, const QByteArray &signature,
+				 const QByteArray &defaultResult,
+				 std::function< QByteArray(const VariableDef &) > func);
+	void writeEnumGeneric (const Enums &enums, QIODevice *device, const QByteArray &signature,
+				const QByteArray &defaultResult,
+				std::function< QByteArray(const EnumDef &) > func);
+	
+	QByteArray generateMethodArgumentTester (const ClassDef &def, const MethodDef &m);
+	QByteArray methodToCallback (const ClassDef &def, const MethodDef &m, bool safe);
+	QByteArray generateGetter (const ClassDef &def, const VariableDef &var);
+	QByteArray generateSetter (const ClassDef &def, const VariableDef &var);
+	void cleanUpClassDef (ClassDef &def);
+	
+	// 
+	QString m_fileName;
+	StringSet m_declaredTypes;
+	StringSet m_declareTypes;
+	StringSet m_avoidedTypes;
+	QVector< ClassDef > m_classes;
+	
+	// 
+	QByteArray m_stringBuffer;
+	int m_stringPos;
+	QMap< QString, int > m_stringPositions;
 	
 };
-
-// 
-QDebug operator<< (QDebug dbg, const VariableDef &variable);
-QDebug operator<< (QDebug dbg, const BaseDef &base);
-QDebug operator<< (QDebug dbg, const MethodDef &method);
-QDebug operator<< (QDebug dbg, const ClassDef &def);
 
 #endif // DEFINITIONS_HPP

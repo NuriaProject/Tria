@@ -13,7 +13,7 @@ include_directories(${CLANG_INCLUDE_DIRS})
 
 qt5_add_resources(qrc_headers.cpp ../headers.qrc)
 
-add_executable(tria main.cpp triaastconsumer.cpp generator.cpp definitions.cpp qrc_headers.cpp)
+add_executable(tria main.cpp triaastconsumer.cpp defs.cpp definitions.cpp qrc_headers.cpp)
 target_link_libraries(tria ${CLANG_LIBS} ${LLVM_LIBS_CORE} ${LLVM_LDFLAGS})
 qt5_use_modules(tria Core)
 

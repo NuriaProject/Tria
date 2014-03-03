@@ -43,7 +43,7 @@
 #include <llvm/Support/Host.h>
 
 #include "triaastconsumer.hpp"
-#include "generator.hpp"
+#include "definitions.hpp"
 
 struct Options {
   bool preprocessOnly = false;
@@ -142,8 +142,8 @@ static void parseArguments (int argc, const char **argv, std::vector< std::strin
 class TriaAction : public clang::ASTFrontendAction {
 public:
 	
-	TriaAction (Generator *generator)
-		: m_generator (generator)
+	TriaAction (Definitions *definitions)
+		: m_definitions (definitions)
 	{
 	}
 	
@@ -153,7 +153,7 @@ protected:
 						       llvm::StringRef fileName) override;
 	
 private:
-	Generator *m_generator;
+	Definitions *m_definitions;
 	
 };
 
@@ -175,10 +175,10 @@ clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, 
 	ci.getLangOpts().CPlusPlus1y = true;
 	ci.getLangOpts().GNUMode = true;
 	
-	return new TriaASTConsumer (ci, fileName, this->m_generator);
+	return new TriaASTConsumer (ci, fileName, this->m_definitions);
 }
 
-static clang::FrontendAction *createAction (bool preprocessOnly, Generator *generator = nullptr) {
+static clang::FrontendAction *createAction (bool preprocessOnly, Definitions *generator = nullptr) {
 	if (preprocessOnly) {
 		return new clang::PrintPreprocessedAction;
 	}
@@ -187,7 +187,7 @@ static clang::FrontendAction *createAction (bool preprocessOnly, Generator *gene
 	return new TriaAction (generator);
 }
 
-static bool generateCode (Generator *generator, const QString &output) {
+static bool generateCode (Definitions *generator, const QString &output) {
 	QFile device;
 	
 	if (output == QLatin1String ("-")) {
@@ -269,7 +269,7 @@ int main (int argc, const char **argv) {
 	}
 	
 	// Create tool instance
-	Generator generator (options.sourceFile);
+	Definitions generator (options.sourceFile);
 	clang::tooling::ToolInvocation tool (arguments, createAction (options.preprocessOnly, &generator), fm);
 	
 	// Map shipped built-in headers
