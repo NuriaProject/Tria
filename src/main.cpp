@@ -43,6 +43,8 @@
 #include <llvm/Support/Host.h>
 
 #include "triaastconsumer.hpp"
+#include "nuriagenerator.hpp"
+#include "jsongenerator.hpp"
 #include "definitions.hpp"
 
 struct Options {
@@ -187,7 +189,7 @@ static clang::FrontendAction *createAction (bool preprocessOnly, Definitions *ge
 	return new TriaAction (generator);
 }
 
-static bool generateCode (Definitions *generator, const QString &output) {
+static bool generateCode (NuriaGenerator *nuriaGenerator, const QString &output) {
 	QFile device;
 	
 	if (output == QLatin1String ("-")) {
@@ -204,7 +206,7 @@ static bool generateCode (Definitions *generator, const QString &output) {
 	}
 	
 	// 
-	return generator->generate (&device);
+	return nuriaGenerator->generate (&device);
 	
 }
 
@@ -269,8 +271,8 @@ int main (int argc, const char **argv) {
 	}
 	
 	// Create tool instance
-	Definitions generator (options.sourceFile);
-	clang::tooling::ToolInvocation tool (arguments, createAction (options.preprocessOnly, &generator), fm);
+	Definitions definitions (options.sourceFile);
+	clang::tooling::ToolInvocation tool (arguments, createAction (options.preprocessOnly, &definitions), fm);
 	
 	// Map shipped built-in headers
 	auto fileBuffers = mapVirtualFiles (tool, QDir (":/headers/"), QStringLiteral ("/builtins/"));
@@ -281,6 +283,7 @@ int main (int argc, const char **argv) {
 	}
 	
 	// Generate code
+	NuriaGenerator generator (&definitions);
 	if (!generateCode (&generator, options.output)) {
 		return 2;
 	}

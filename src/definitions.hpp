@@ -30,7 +30,10 @@ typedef QSet< QString > StringSet;
 
 class Definitions {
 public:
-	Definitions (const QString &fileName);
+	Definitions (const QString &sourceFileName);
+	
+	/** Returns the name of the source file. */
+	QString sourceFileName () const;
 	
 	/** Adds \a theClass. */
 	void addClassDefinition (const ClassDef &theClass);
@@ -38,8 +41,21 @@ public:
 	/** Returns all class definitions */
 	QVector< ClassDef > classDefintions () const;
 	
+	/**
+	 * Returns the types which should be declared.
+	 * Avoided types over-rule this list. This list in turn over-rules
+	 * "declareTypes".
+	 */
+	StringSet declaredTypes () const;
+	
 	/** Registers \a type as already Q_DECLARE_METATYPE'd. */
 	void addDeclaredType (const QString &type);
+	
+	/** Returns \c true if \a type has already been declared. */
+	bool isTypeDeclared (const QString &type);
+	
+	/** Returns the list of to-be-declared types. */
+	StringSet declareTypes () const;
 	
 	/** Tells the generator to generate a metatype declaration. */
 	void declareType (const QString &type);
@@ -47,58 +63,22 @@ public:
 	/** Takes \a type out of the to-be-declared list. */
 	void undeclareType (const QString &type);
 	
+	/**
+	 * Returns a list of types which should be avoided. Mainly, these
+	 * types don't offer value-semantics.
+	 * 
+	 * \note Please note, that T is not T* - The latter is always fine.
+	 */
+	StringSet avoidedTypes () const;
+	
+	/** Returns \c true if \a type should be avoided. */
+	bool isTypeAvoided (const QString &type);
+	
 	/** Will avoid \a type when generating code. */
 	void avoidType (const QString &type);
 	
-	/** Generates code and writes it to \a device. */
-	bool generate (QIODevice *device);
-	
 private:
 	
-	/** Registers \a string and returns its offset. */
-	int registerString (const QString &string);
-	QByteArray stringAcessor (const QString &string);
-	QByteArray toByteArray (const QString &string);
-	
-	void writeHeader (QIODevice *device);
-	void writeStringBuffer (QIODevice *device);
-	
-	void writeRegisterMetatypeForClass (const ClassDef &def, QIODevice *device);
-	void writeRegisterMetatype (const QString &type, QIODevice *device);
-	void writeDeclareMetatypeForClass (const ClassDef &def, QIODevice *device);
-	void writeDeclareMetatype (const QString &type, QIODevice *device);
-	void writeMemberConverters (const ClassDef &def, QIODevice *device);
-	void writeMemberConverter (const ConversionDef &def, QIODevice *device);
-	void writeStaticConverter (const ConversionDef &def, QIODevice *device);
-	
-	void writeInstantiorClass (QIODevice *device);
-	void writeConversionRegisterers (const ClassDef &def, QIODevice *device);
-	
-	void writeClassDef (ClassDef &def, QIODevice *device);
-	void writeDestroyMethod (const ClassDef &def, QIODevice *device);
-	void writeBasesMethod (const ClassDef &def, QIODevice *device);
-	void writeCountMethods (const ClassDef &def, QIODevice *device);
-	void writeAnnotationMethods (const ClassDef &def, QIODevice *device);
-	void writeMethodMethods (const ClassDef &def, QIODevice *device);
-	void writeFieldMethods (const ClassDef &def, QIODevice *device);
-	void writeEnumMethods (const ClassDef &def, QIODevice *device);
-	void writeGateCallMethod (const ClassDef &def, QIODevice *device);
-	
-	void writeMethodGeneric (const Methods &methods, QIODevice *device, const QByteArray &signature,
-				 const QByteArray &defaultResult,
-				 std::function< QByteArray(const MethodDef &) > fun
-				 , const QString &prologue = QString());
-	void writeFieldGeneric (const Variables &variables, QIODevice *device, const QByteArray &signature,
-				 const QByteArray &defaultResult,
-				 std::function< QByteArray(const VariableDef &) > func);
-	void writeEnumGeneric (const Enums &enums, QIODevice *device, const QByteArray &signature,
-				const QByteArray &defaultResult,
-				std::function< QByteArray(const EnumDef &) > func);
-	
-	QByteArray generateMethodArgumentTester (const ClassDef &def, const MethodDef &m);
-	QByteArray methodToCallback (const ClassDef &def, const MethodDef &m, bool safe);
-	QByteArray generateGetter (const ClassDef &def, const VariableDef &var);
-	QByteArray generateSetter (const ClassDef &def, const VariableDef &var);
 	void cleanUpClassDef (ClassDef &def);
 	
 	// 
@@ -107,11 +87,6 @@ private:
 	StringSet m_declareTypes;
 	StringSet m_avoidedTypes;
 	QVector< ClassDef > m_classes;
-	
-	// 
-	QByteArray m_stringBuffer;
-	int m_stringPos;
-	QMap< QString, int > m_stringPositions;
 	
 };
 
