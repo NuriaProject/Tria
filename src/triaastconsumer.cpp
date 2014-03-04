@@ -597,8 +597,10 @@ void TriaASTConsumer::processEnum (ClassDef &classDef, clang::EnumDecl *decl) {
 	
 	for (auto it = decl->enumerator_begin (); it != decl->enumerator_end (); ++it) {
 		const clang::EnumConstantDecl *cur = *it;
+		const llvm::APSInt &value = cur->getInitVal ();
+		
 		def.keys.append (llvmToString (cur->getName ()));
-		def.values.append (-1); // FIXME
+		def.values.append (value.isUnsigned () ? value.getZExtValue () : value.getSExtValue ());
 	}
 	
 	// Store and declare
