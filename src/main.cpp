@@ -47,26 +47,40 @@
 #include "jsongenerator.hpp"
 #include "definitions.hpp"
 
+enum class OutputGenerators {
+	DefaultGenerator = 0x0,
+	CPlusPlusGenerator = 0x1,
+	JsonGenerator = 0x2
+};
+
 struct Options {
-  bool preprocessOnly = false;
-  QString sourceFile;
-  QString output = QStringLiteral ("-");
+	int generators = int (OutputGenerators::DefaultGenerator);
+	bool jsonAppend = false;
+	bool preprocessOnly = false;
+	QString sourceFile;
+	QString cxxOutput = QStringLiteral ("-");
+	QString jsonOutput = QStringLiteral ("-");
 };
 
 static void showVersion () {
-	::printf ("Tria by the NuriaProject\n");
+	::printf ("Tria by the NuriaProject, built on " __DATE__ " " __TIME__ "\n");
 }
 
 static void showHelp () {
 	showVersion ();
 	::printf ("Usage: tria [options] <header file> -- <include searchpaths>\n"
 		  "  -o<file>             Write output to <file> (Defaults to stdout)\n"
+		  "  -j<file>             Write JSON output to <file>\n"
+		  "  -a                   Insert class definitions into JSON file, keeping other data\n"
 		  "  -I<dir>              Add <dir> to the search path for #includes\n"
 		  "  -E                   Only runs the pre-processor of clang\n"
 		  "  -D<macro>[=<value>]  Defines <macro> with a optional <value>\n"
 		  "  -U<macro>            Undefine <macro>\n"
 		  "  -- <path(s)>         Everything after -- is treated like a -I<Path>\n"
-		  "                       This option only exists to work-around QMakes inabilities.\n");
+		  "                       This option only exists to work-around QMakes inabilities.\n"
+		  "Note: When only -o or -j is given, only C++ code or JSON data will be generated.\n"
+		  "      Setting both will generate both types at once. When neither are given, the\n"
+		  "      default behaviour is to generate C++ code and output it on stdout.\n");
 }
 
 static void parseArguments (int argc, const char **argv, std::vector< std::string > &clangArgs,
@@ -87,12 +101,28 @@ static void parseArguments (int argc, const char **argv, std::vector< std::strin
 			case 'v':
 				showVersion ();
 				::exit (0);
+			case 'a':
+				options.jsonAppend = true;
+				break;
 			case 'o':
+				options.generators |= int (OutputGenerators::CPlusPlusGenerator);
+				
 				if (cur[2]) {
-					options.output = cur + 2;
+					options.cxxOutput = cur + 2;
 				} else if (i + 1 < argc) {
 					i++;
-					options.output = argv[i];
+					options.cxxOutput = argv[i];
+				}
+				
+				break;
+			case 'j':
+				options.generators |= int (OutputGenerators::JsonGenerator);
+				
+				if (cur[2]) {
+					options.cxxOutput = cur + 2;
+				} else if (i + 1 < argc) {
+					i++;
+					options.jsonOutput = argv[i];
 				}
 				
 				break;
@@ -189,24 +219,21 @@ static clang::FrontendAction *createAction (bool preprocessOnly, Definitions *ge
 	return new TriaAction (generator);
 }
 
-static bool generateCode (NuriaGenerator *nuriaGenerator, const QString &output) {
-	QFile device;
-	
-	if (output == QLatin1String ("-")) {
+static bool openStdoutOrFile (QFile &device, const QString &path) {
+	if (path == QLatin1String ("-")) {
 		device.open (stdout, QIODevice::WriteOnly);
 	} else {
-		device.setFileName (output);
+		device.setFileName (path);
 		if (!device.open (QIODevice::WriteOnly)) {
 			qCritical("Failed to open file %s: %s",
-				  qPrintable(output),
+				  qPrintable(path),
 				  qPrintable(device.errorString ()));
 			return false;
 		}
 		
 	}
 	
-	// 
-	return nuriaGenerator->generate (&device);
+	return true;
 	
 }
 
@@ -282,10 +309,29 @@ int main (int argc, const char **argv) {
 		return 1;
 	}
 	
-	// Generate code
-	NuriaGenerator generator (&definitions);
-	if (!generateCode (&generator, options.output)) {
-		return 2;
+	// Generate code. C++ code generator
+	if (options.generators == int (OutputGenerators::DefaultGenerator) ||
+	    options.generators & int (OutputGenerators::CPlusPlusGenerator)) {
+		NuriaGenerator generator (&definitions);
+		QFile device;
+		
+		if (!openStdoutOrFile (device, options.cxxOutput) ||
+		    !generator.generate (&device)) {
+			return 2;
+		}
+		
+	}
+	
+	// JSON generator
+	if (options.generators & int (OutputGenerators::JsonGenerator)) {
+		JsonGenerator generator (&definitions);
+		QFile device;
+		
+		if (!openStdoutOrFile (device, options.jsonOutput) ||
+		    !generator.generate (&device, options.jsonAppend)) {
+			return 3;
+		}
+		
 	}
 	
 	// Avoid "fileHandles is unused" warning
