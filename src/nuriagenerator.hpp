@@ -28,8 +28,6 @@
 class QIODevice;
 class Definitions;
 
-typedef QSet< QString > StringSet;
-
 class NuriaGenerator {
 public:
 	NuriaGenerator (Definitions *definitions);

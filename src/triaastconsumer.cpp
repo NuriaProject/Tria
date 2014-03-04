@@ -86,6 +86,27 @@ static QString annotationValue (const QString &name, AnnotationType &type) {
 }
 
 QMetaType::Type TriaASTConsumer::typeOfAnnotationValue (const QString &valueData) {
+	bool isInt = false;
+	valueData.toInt (&isInt);
+	
+	if (isInt) {
+		return QMetaType::Int;
+	}
+	
+	// 
+	bool isFloat = false;
+	valueData.toFloat (&isFloat);
+	
+	if (isFloat) {
+		return QMetaType::Float;
+	}
+	
+	// Bool?
+	if (valueData == "true" || valueData == "false") {
+		return QMetaType::Bool;
+	}
+	
+	// Unknown
 	return QMetaType::QVariant;
 }
 
@@ -576,7 +597,8 @@ void TriaASTConsumer::processEnum (ClassDef &classDef, clang::EnumDecl *decl) {
 	
 	for (auto it = decl->enumerator_begin (); it != decl->enumerator_end (); ++it) {
 		const clang::EnumConstantDecl *cur = *it;
-		def.values.append (llvmToString (cur->getName ()));
+		def.keys.append (llvmToString (cur->getName ()));
+		def.values.append (-1); // FIXME
 	}
 	
 	// Store and declare

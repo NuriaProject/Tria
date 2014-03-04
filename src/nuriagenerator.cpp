@@ -939,7 +939,7 @@ void NuriaGenerator::writeEnumMethods (const ClassDef &def, QIODevice *device) {
 			code.append ("      case ");
 			code.append (QByteArray::number (i));
 			code.append (": return ");
-			code.append (toByteArray (e.values.at (i)));
+			code.append (toByteArray (e.keys.at (i)));
 			code.append (";\n");
 		}
 		
@@ -957,7 +957,7 @@ void NuriaGenerator::writeEnumMethods (const ClassDef &def, QIODevice *device) {
 			     "      switch (at) {\n");
 		for (int i = 0; i < e.values.length (); i++) {
 			QByteArray qualified = def.name.toLatin1 () + QByteArrayLiteral ("::") +
-					       e.values.at (i).toLatin1 ();
+					       e.keys.at (i).toLatin1 ();
 			code.append ("      case ");
 			code.append (QByteArray::number (i));
 			code.append (": return ");

@@ -109,7 +109,8 @@ typedef QVector< BaseDef > Bases;
 
 struct EnumDef {
 	QString name;
-	QStringList values;
+	QStringList keys;
+	QVector< int > values;
 	Annotations annotations;
 	
 };
