@@ -36,8 +36,10 @@ static const QString writeAnnotation = QStringLiteral ("nuria_write:");
 static const QString requireAnnotation = QStringLiteral ("nuria_require:");
 
 TriaASTConsumer::TriaASTConsumer (clang::CompilerInstance &compiler, const llvm::StringRef &fileName,
+				  const QStringList &introspectBases, bool introspectAll,
 				  Definitions *definitions)
-	: m_definitions (definitions) , m_compiler (compiler)
+	: m_definitions (definitions), m_introspectedBases (introspectBases),
+	  m_introspectAll (introspectAll), m_compiler (compiler)
 {
 	Q_UNUSED(fileName)
 	
@@ -147,6 +149,27 @@ AnnotationDef TriaASTConsumer::parseNuriaAnnotate (const QString &data) {
 	return def;
 }
 
+bool TriaASTConsumer::derivesFromIntrospectClass (const clang::CXXRecordDecl *record) {
+	for (auto it = record->bases_begin (); it != record->bases_end (); ++it) {
+		const clang::CXXBaseSpecifier &specifier = *it;
+		const clang::Type *type = specifier.getType ().getTypePtr ();
+		
+		if (this->m_introspectedBases.contains (typeName (type))) {
+			return true;
+		}
+		
+		// 
+		const clang::CXXRecordDecl *decl = type->getAsCXXRecordDecl ();
+		if (decl && derivesFromIntrospectClass (decl)) {
+			return true;
+		}
+		
+	}
+	
+	// 
+	return false;
+	
+}
 
 Annotations TriaASTConsumer::annotationsFromDecl (clang::Decl *decl) {
 	Annotations list;
@@ -462,7 +485,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 	
 	// Skip non-public methods. skipped methods and methods which are default-implemented
 	bool resultTypeHasValueSemantics = hasTypeValueSemantics (decl->getResultType ());
-	if (def.access != clang::AS_public || decl->isDefaulted () ||
+	if (def.access != clang::AS_public || decl->isDefaulted () || decl->isDeleted () ||
 	    !resultTypeHasValueSemantics || containsAnnotation (def.annotations, skipAnnotation)) {
 		
 		if (!resultTypeHasValueSemantics) {
@@ -664,7 +687,16 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	classDef.annotations = annotationsFromDecl (record);
 	
 	// Skip if not to be 'introspected'
-	if (!containsAnnotation (classDef.annotations, introspectAnnotation)) {
+	if (!this->m_introspectAll &&
+	    !containsAnnotation (classDef.annotations, introspectAnnotation)) {
+		if (this->m_introspectedBases.isEmpty () || !derivesFromIntrospectClass (record)) {
+			return;
+		}
+		
+	}
+	
+	// Skip anyway?
+	if (containsAnnotation (classDef.annotations, skipAnnotation)) {
 		return;
 	}
 	

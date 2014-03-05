@@ -52,8 +52,7 @@ namespace {
 using namespace llvm;
 
 // Options
-cl::opt< std::string > argInputFile (cl::Positional, cl::desc ("<input file>"),
-				     cl::init ("-"), cl::value_desc ("file"));
+cl::opt< std::string > argInputFile (cl::Positional, cl::desc ("<input file>"), cl::value_desc ("file"));
 cl::list< std::string > argSearchPaths (cl::ConsumeAfter, cl::desc ("<additional search paths (For moc compat)>"));
 cl::opt< std::string > argCxxOutputFile ("cxx-output", cl::ValueOptional, cl::init ("-"),
 					 cl::desc ("C++ output file"), cl::value_desc ("cpp file"));
@@ -61,6 +60,12 @@ cl::opt< std::string > argJsonOutputFile ("json-output", cl::ValueOptional, cl::
 					  cl::desc ("JSON output file"), cl::value_desc ("json file"));
 cl::opt< bool > argJsonInsert ("insert-json", cl::ValueDisallowed,
 			       cl::desc ("Insert JSON output data into the json output file rather than replacing it"));
+cl::opt< bool > argInspectAll ("introspect-all", cl::ValueDisallowed,
+			       cl::desc ("All types will be introspected as if they had a NURIA_INTROSPECT annotation. "
+					 "Types with NURIA_SKIP will be ignored."));
+cl::list< std::string > argInspectBases ("introspect-inheriting", cl::CommaSeparated,
+					 cl::desc ("Introspect all types which inherit <type>."),
+					 cl::value_desc ("type1,typeN,..."));
 cl::list< std::string > argIncludeDirs ("I", cl::Prefix, cl::desc ("Additional search path"), cl::value_desc ("path"));
 cl::list< std::string > argDefines ("D", cl::Prefix, cl::desc ("#define"), cl::value_desc ("name[=value]"));
 cl::list< std::string > argUndefines ("U", cl::Prefix, cl::desc ("#undef"), cl::value_desc ("name"));
@@ -69,6 +74,8 @@ cl::list< std::string > argUndefines ("U", cl::Prefix, cl::desc ("#undef"), cl::
 cl::alias aliasCxxOutputFile ("o", cl::Prefix, cl::desc ("Alias for -cxx-output"), cl::aliasopt (argCxxOutputFile));
 cl::alias aliasJsonOutputFile ("j", cl::Prefix, cl::desc ("Alias for -json-output"), cl::aliasopt (argJsonOutputFile));
 cl::alias aliasJsonInsert ("a", cl::desc ("Alias for -insert-json"), cl::aliasopt (argJsonInsert));
+cl::alias aliasInspectBases ("B", cl::Prefix, cl::desc ("Alias for -introspect-inheriting"),
+			     cl::aliasopt (argInspectBases));
 
 }
 
@@ -104,12 +111,19 @@ clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, 
 #if CLANG_VERSION_MAJOR != 3 || CLANG_VERSION_MINOR > 2
 	ci.getLangOpts().CPlusPlus11 = true;
 #else
-	CI.getLangOpts().CPlusPlus0x = true;
+	ci.getLangOpts().CPlusPlus0x = true;
 #endif
 	ci.getLangOpts().CPlusPlus1y = true;
 	ci.getLangOpts().GNUMode = true;
 	
-	return new TriaASTConsumer (ci, fileName, this->m_definitions);
+	// 
+	QStringList whichInherit;
+	for (const std::string &cur : argInspectBases) {
+		whichInherit.append (QString::fromStdString (cur));
+	}
+	
+	// 
+	return new TriaASTConsumer (ci, fileName, whichInherit, argInspectAll, this->m_definitions);
 }
 
 static bool openStdoutOrFile (QFile &device, const QString &path, QIODevice::OpenMode openMode) {

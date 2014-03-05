@@ -32,7 +32,9 @@ class CXXMethodDecl;
 class Definitions;
 class TriaASTConsumer : public clang::ASTConsumer {
 public:
-	TriaASTConsumer (clang::CompilerInstance &compiler, const llvm::StringRef &fileName, Definitions *definitions);
+	TriaASTConsumer (clang::CompilerInstance &compiler, const llvm::StringRef &fileName,
+			 const QStringList &introspectBases, bool introspectAll,
+			 Definitions *definitions);
 	
 	void Initialize (clang::ASTContext &ctx) override;
 	void HandleTagDeclDefinition (clang::TagDecl *decl) override;
@@ -41,6 +43,8 @@ private:
 	Annotations annotationsFromDecl (clang::Decl *decl);
 	QMetaType::Type typeOfAnnotationValue (const QString &valueData);
 	AnnotationDef parseNuriaAnnotate (const QString &data);
+	
+	bool derivesFromIntrospectClass (const clang::CXXRecordDecl *record);
 	
 	void reportError (clang::SourceLocation loc, const QByteArray &info);
 	void reportWarning (clang::SourceLocation loc, const QByteArray &info);
@@ -64,7 +68,11 @@ private:
 	void processEnum (ClassDef &classDef, clang::EnumDecl *decl);
 	void processConversion (ClassDef &classDef, clang::CXXConversionDecl *convDecl);
 	
+	// 
 	Definitions *m_definitions;
+	QStringList m_introspectedBases;
+	bool m_introspectAll;
+	
 	clang::CompilerInstance &m_compiler;
 	clang::ASTContext *m_context = nullptr;
 	clang::FileID m_mainFileId;
