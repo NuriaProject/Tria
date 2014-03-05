@@ -26,148 +26,50 @@
 #include <QFile>
 #include <QDir>
 
-#include <clang/Frontend/FrontendAction.h>
-#include <clang/Frontend/FrontendActions.h>
-#include <clang/Tooling/Tooling.h>
-#include <clang/Driver/Driver.h>
-#include <clang/Driver/Compilation.h>
-#include <clang/Driver/Tool.h>
-#include <clang/Basic/DiagnosticIDs.h>
-#include <clang/Lex/LexDiagnostic.h>
-
-#include <clang/Driver/Job.h>
 #include <clang/Frontend/TextDiagnosticPrinter.h>
+#include <clang/Frontend/FrontendActions.h>
+#include <clang/Frontend/FrontendAction.h>
+#include <clang/Basic/DiagnosticIDs.h>
+#include <clang/Driver/Compilation.h>
+#include <llvm/Support/CommandLine.h>
+#include <clang/Lex/LexDiagnostic.h>
 #include <clang/Lex/Preprocessor.h>
+#include <clang/Tooling/Tooling.h>
 #include <clang/AST/ASTContext.h>
+#include <clang/Driver/Driver.h>
 #include <clang/AST/DeclCXX.h>
+#include <clang/Driver/Tool.h>
 #include <llvm/Support/Host.h>
+#include <clang/Driver/Job.h>
 
 #include "triaastconsumer.hpp"
 #include "nuriagenerator.hpp"
 #include "jsongenerator.hpp"
 #include "definitions.hpp"
 
-enum class OutputGenerators {
-	DefaultGenerator = 0x0,
-	CPlusPlusGenerator = 0x1,
-	JsonGenerator = 0x2
-};
+// Command-line arguments
+namespace {
+using namespace llvm;
 
-struct Options {
-	int generators = int (OutputGenerators::DefaultGenerator);
-	bool jsonAppend = false;
-	bool preprocessOnly = false;
-	QString sourceFile;
-	QString cxxOutput = QStringLiteral ("-");
-	QString jsonOutput = QStringLiteral ("-");
-};
+// Options
+cl::opt< std::string > argInputFile (cl::Positional, cl::desc ("<input file>"),
+				     cl::init ("-"), cl::value_desc ("file"));
+cl::list< std::string > argSearchPaths (cl::ConsumeAfter, cl::desc ("<additional search paths (For moc compat)>"));
+cl::opt< std::string > argCxxOutputFile ("cxx-output", cl::ValueOptional, cl::init ("-"),
+					 cl::desc ("C++ output file"), cl::value_desc ("cpp file"));
+cl::opt< std::string > argJsonOutputFile ("json-output", cl::ValueOptional, cl::init ("-"),
+					  cl::desc ("JSON output file"), cl::value_desc ("json file"));
+cl::opt< bool > argJsonInsert ("insert-json", cl::ValueDisallowed,
+			       cl::desc ("Insert JSON output data into the json output file rather than replacing it"));
+cl::list< std::string > argIncludeDirs ("I", cl::Prefix, cl::desc ("Additional search path"), cl::value_desc ("path"));
+cl::list< std::string > argDefines ("D", cl::Prefix, cl::desc ("#define"), cl::value_desc ("name[=value]"));
+cl::list< std::string > argUndefines ("U", cl::Prefix, cl::desc ("#undef"), cl::value_desc ("name"));
 
-static void showVersion () {
-	::printf ("Tria by the NuriaProject, built on " __DATE__ " " __TIME__ "\n");
-}
+// Aliases
+cl::alias aliasCxxOutputFile ("o", cl::Prefix, cl::desc ("Alias for -cxx-output"), cl::aliasopt (argCxxOutputFile));
+cl::alias aliasJsonOutputFile ("j", cl::Prefix, cl::desc ("Alias for -json-output"), cl::aliasopt (argJsonOutputFile));
+cl::alias aliasJsonInsert ("a", cl::desc ("Alias for -insert-json"), cl::aliasopt (argJsonInsert));
 
-static void showHelp () {
-	showVersion ();
-	::printf ("Usage: tria [options] <header file> -- <include searchpaths>\n"
-		  "  -o<file>             Write output to <file> (Defaults to stdout)\n"
-		  "  -j<file>             Write JSON output to <file>\n"
-		  "  -a                   Insert class definitions into JSON file, keeping other data\n"
-		  "  -I<dir>              Add <dir> to the search path for #includes\n"
-		  "  -E                   Only runs the pre-processor of clang\n"
-		  "  -D<macro>[=<value>]  Defines <macro> with a optional <value>\n"
-		  "  -U<macro>            Undefine <macro>\n"
-		  "  -- <path(s)>         Everything after -- is treated like a -I<Path>\n"
-		  "                       This option only exists to work-around QMakes inabilities.\n"
-		  "Note: When only -o or -j is given, only C++ code or JSON data will be generated.\n"
-		  "      Setting both will generate both types at once. When neither are given, the\n"
-		  "      default behaviour is to generate C++ code and output it on stdout.\n");
-}
-
-static void parseArguments (int argc, const char **argv, std::vector< std::string > &clangArgs,
-			    Options &options) {
-	bool nextArgNotInput = false;
-	bool hasInput = false;
-	
-	for (int i = 1; i < argc; i++) {
-		const char *cur = argv[i];
-		
-		if (*cur == '-') {
-			nextArgNotInput = false;
-			switch (cur[1]) {
-			case 'h':
-			case '?':
-				showHelp ();
-				::exit (0);
-			case 'v':
-				showVersion ();
-				::exit (0);
-			case 'a':
-				options.jsonAppend = true;
-				break;
-			case 'o':
-				options.generators |= int (OutputGenerators::CPlusPlusGenerator);
-				
-				if (cur[2]) {
-					options.cxxOutput = cur + 2;
-				} else if (i + 1 < argc) {
-					i++;
-					options.cxxOutput = argv[i];
-				}
-				
-				break;
-			case 'j':
-				options.generators |= int (OutputGenerators::JsonGenerator);
-				
-				if (cur[2]) {
-					options.cxxOutput = cur + 2;
-				} else if (i + 1 < argc) {
-					i++;
-					options.jsonOutput = argv[i];
-				}
-				
-				break;
-			case 'E':
-				options.preprocessOnly = true;
-				break;
-			case 'f':
-			case 'D':
-			case 'I':
-			case 'U':
-			case 'W':
-			case 'X':
-				clangArgs.push_back (cur);
-				if (!cur[2]) {
-					nextArgNotInput = true;
-				}
-				
-				break;
-			case '-':
-				for (i++; i < argc; i++) {
-					clangArgs.push_back (std::string ("-I") + argv[i]);
-				}
-				
-				break;
-			default:
-				std::cerr << "tria: Invalid argument '" << cur << "'" << std::endl;
-				::exit (1);
-			}
-			
-		} else {
-			if (!nextArgNotInput) {
-				if (hasInput) {
-					std::cerr << "error: Only one input file may be specified" << std::endl;
-					::exit (2);
-				}
-				
-				hasInput = true;
-			}
-			
-			clangArgs.push_back (cur);
-			options.sourceFile = cur;
-		}
-		
-	}
-	
 }
 
 // 
@@ -210,21 +112,12 @@ clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, 
 	return new TriaASTConsumer (ci, fileName, this->m_definitions);
 }
 
-static clang::FrontendAction *createAction (bool preprocessOnly, Definitions *generator = nullptr) {
-	if (preprocessOnly) {
-		return new clang::PrintPreprocessedAction;
-	}
-	
-	// 
-	return new TriaAction (generator);
-}
-
-static bool openStdoutOrFile (QFile &device, const QString &path) {
-	if (path == QLatin1String ("-")) {
-		device.open (stdout, QIODevice::WriteOnly);
+static bool openStdoutOrFile (QFile &device, const QString &path, QIODevice::OpenMode openMode) {
+	if (path.isEmpty () || path == "-") {
+		device.open (stdout, openMode);
 	} else {
 		device.setFileName (path);
-		if (!device.open (QIODevice::WriteOnly)) {
+		if (!device.open (openMode)) {
 			qCritical("Failed to open file %s: %s",
 				  qPrintable(path),
 				  qPrintable(device.errorString ()));
@@ -270,6 +163,22 @@ static QVector< QByteArray > mapVirtualFiles (clang::tooling::ToolInvocation &to
 	return buffers;
 }
 
+static void prefixedAppend (std::vector< std::string > &arguments, llvm::cl::list< std::string > &input,
+			    const std::string &prefix) {
+	for (const std::string &cur : input) {
+		arguments.push_back (prefix + cur);
+	}
+	
+}
+
+static void passThroughClangOptions (std::vector< std::string > &arguments) {
+	prefixedAppend (arguments, argDefines, "-D");
+	prefixedAppend (arguments, argUndefines, "-U");
+	prefixedAppend (arguments, argIncludeDirs, "-I");
+	prefixedAppend (arguments, argSearchPaths, "-I");
+	
+}
+
 int main (int argc, const char **argv) {
 	std::vector< std::string > arguments;
 	
@@ -280,26 +189,24 @@ int main (int argc, const char **argv) {
 	arguments.push_back ("-fPIE");
 	arguments.push_back ("-DTRIA_RUN");
 	arguments.push_back ("-std=c++11");
+	arguments.push_back ("-fsyntax-only");
 	
 	// Parse arguments
-	Options options;
-	parseArguments (argc, argv, arguments, options);
+	const char *helpTitle = "Tria by the NuriaProject, built on " __DATE__ " " __TIME__;
+	llvm::cl::ParseCommandLineOptions (argc, argv, helpTitle);
 	
 	// Always include built-in headers
 	arguments.push_back ("-I/builtins");
+	passThroughClangOptions (arguments);
+	arguments.push_back (argInputFile);
 	
 	// 
 	clang::FileManager *fm = new clang::FileManager ({"."});
-	if (options.preprocessOnly) {
-		arguments.push_back ("-P");
-	} else {
-		// Don't compile anything, Clang itself will only validate the syntax.
-		arguments.push_back ("-fsyntax-only");
-	}
 	
 	// Create tool instance
-	Definitions definitions (options.sourceFile);
-	clang::tooling::ToolInvocation tool (arguments, createAction (options.preprocessOnly, &definitions), fm);
+	Definitions definitions (QString::fromStdString (argInputFile));
+	TriaAction *triaAction = new TriaAction (&definitions);
+	clang::tooling::ToolInvocation tool (arguments, triaAction, fm);
 	
 	// Map shipped built-in headers
 	auto fileBuffers = mapVirtualFiles (tool, QDir (":/headers/"), QStringLiteral ("/builtins/"));
@@ -309,13 +216,17 @@ int main (int argc, const char **argv) {
 		return 1;
 	}
 	
-	// Generate code. C++ code generator
-	if (options.generators == int (OutputGenerators::DefaultGenerator) ||
-	    options.generators & int (OutputGenerators::CPlusPlusGenerator)) {
+	// Generate code
+	bool jsonOutput = (argJsonOutputFile.getPosition () > 0);
+	bool cxxOutput = (argCxxOutputFile.getPosition () > 0);
+	
+	// C++ code generator
+	if (!jsonOutput || (cxxOutput && jsonOutput)) {
+		QString path = QString::fromStdString (argCxxOutputFile);
 		NuriaGenerator generator (&definitions);
 		QFile device;
 		
-		if (!openStdoutOrFile (device, options.cxxOutput) ||
+		if (!openStdoutOrFile (device, path, QIODevice::WriteOnly) ||
 		    !generator.generate (&device)) {
 			return 2;
 		}
@@ -323,12 +234,13 @@ int main (int argc, const char **argv) {
 	}
 	
 	// JSON generator
-	if (options.generators & int (OutputGenerators::JsonGenerator)) {
+	if (jsonOutput) {
+		QString path = QString::fromStdString (argJsonOutputFile);
 		JsonGenerator generator (&definitions);
 		QFile device;
 		
-		if (!openStdoutOrFile (device, options.jsonOutput) ||
-		    !generator.generate (&device, options.jsonAppend)) {
+		if (!openStdoutOrFile (device, path, QIODevice::ReadWrite) ||
+		    !generator.generate (&device, argJsonInsert)) {
 			return 3;
 		}
 		
