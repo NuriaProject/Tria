@@ -181,7 +181,6 @@ void Definitions::cleanUpClassDef (ClassDef &def) {
 	
 	// 
 	for (EnumDef &cur : def.enums) {
-		std::sort (cur.keys.begin (), cur.keys.end ());
 		std::sort (cur.annotations.begin (), cur.annotations.end (), &sortByName< AnnotationDef >);
 	}
 	

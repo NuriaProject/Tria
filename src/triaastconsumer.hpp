@@ -21,6 +21,8 @@
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/Decl.h>
+#include <QStringList>
+
 #include "definitions.hpp"
 
 namespace clang {

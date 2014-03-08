@@ -19,9 +19,10 @@
 #define DEFS_HPP
 
 #include <clang/Basic/Specifiers.h>
-#include <QStringList>
+#include <QMetaType>
 #include <QString>
 #include <QVector>
+#include <QMap>
 
 enum MethodType {
 	ConstructorMethod = 0,
@@ -109,8 +110,7 @@ typedef QVector< BaseDef > Bases;
 
 struct EnumDef {
 	QString name;
-	QStringList keys;
-	QVector< int > values;
+	QMap< QString, int > elements;
 	Annotations annotations;
 	
 };

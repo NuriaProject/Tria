@@ -622,8 +622,10 @@ void TriaASTConsumer::processEnum (ClassDef &classDef, clang::EnumDecl *decl) {
 		const clang::EnumConstantDecl *cur = *it;
 		const llvm::APSInt &value = cur->getInitVal ();
 		
-		def.keys.append (llvmToString (cur->getName ()));
-		def.values.append (value.isUnsigned () ? value.getZExtValue () : value.getSExtValue ());
+		QString elementName = llvmToString (cur->getName ());
+		int elementValue = (value.isUnsigned () ? value.getZExtValue () : value.getSExtValue ());
+		
+		def.elements.insert (elementName, elementValue);
 	}
 	
 	// Store and declare

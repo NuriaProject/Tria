@@ -925,7 +925,7 @@ void NuriaGenerator::writeEnumMethods (const ClassDef &def, QIODevice *device) {
 	
 	// int enumElementCount (int index) const
 	std::function< QByteArray(const EnumDef &) > enumCount = [this](const EnumDef &e) {
-		return QByteArrayLiteral ("return ") + QByteArray::number (e.values.length ());
+		return QByteArrayLiteral ("return ") + QByteArray::number (e.elements.size ());
 	};
 	
 	writeGenericFunction (def.enums, device, "int _enumElementCount (int index)", "-1", "index", enumCount);
@@ -935,12 +935,14 @@ void NuriaGenerator::writeEnumMethods (const ClassDef &def, QIODevice *device) {
 		QByteArray code;
 		code.append ("\n"
 			     "      switch (at) {\n");
-		for (int i = 0; i < e.values.length (); i++) {
+		int i = 0;
+		for (auto it = e.elements.constBegin (); it != e.elements.constEnd (); ++it) {
 			code.append ("      case ");
 			code.append (QByteArray::number (i));
 			code.append (": return ");
-			code.append (toByteArray (e.keys.at (i)));
+			code.append (toByteArray (it.key ()));
 			code.append (";\n");
+			i++;
 		}
 		
 		code.append ("      } break;");
@@ -955,14 +957,16 @@ void NuriaGenerator::writeEnumMethods (const ClassDef &def, QIODevice *device) {
 		QByteArray code;
 		code.append ("\n"
 			     "      switch (at) {\n");
-		for (int i = 0; i < e.values.length (); i++) {
-			QByteArray qualified = def.name.toLatin1 () + QByteArrayLiteral ("::") +
-					       e.keys.at (i).toLatin1 ();
+		int i = 0;
+		for (auto it = e.elements.constBegin (); it != e.elements.constEnd (); ++it) {
+			QByteArray qualified = def.name.toLatin1 () + QByteArrayLiteral ("::")
+					       + it.key ().toLatin1 ();
 			code.append ("      case ");
 			code.append (QByteArray::number (i));
 			code.append (": return ");
 			code.append (qualified);
 			code.append (";\n");
+			i++;
 		}
 		
 		code.append ("      } break;");

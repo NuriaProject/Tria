@@ -222,8 +222,11 @@ bool JsonGenerator::serializeEnums (QJsonObject &target, const Enums &enums) {
 		
 		// 
 		serializeAnnotations (annotations, cur.annotations);
-		for (int i = 0; i < cur.keys.length (); i++) {
-			values.insert (cur.keys.at (i), cur.values.at (i));
+		
+		auto it = cur.elements.constBegin ();
+		auto end = cur.elements.constEnd ();
+		for (; it != end; ++it) {
+			values.insert (it.key (), it.value ());
 		}
 		
 		// 
