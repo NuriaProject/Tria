@@ -49,7 +49,7 @@ QByteArray NuriaGenerator::toByteArray (const QString &string) {
 
 bool NuriaGenerator::generate (QIODevice *device) {
 	QVector< ClassDef > classes = this->m_definitions->classDefintions ();
-	StringSet declareTypes = this->m_definitions->declareTypes ();
+	StringSet declareTypes = this->m_definitions->declareTypesWithoutDuplicates ();
 	
 	// 
 //	qDebug() << "=> Declaring" << declareTypes;

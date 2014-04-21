@@ -239,8 +239,10 @@ QString TriaASTConsumer::typeDeclName (const clang::NamedDecl *decl, const clang
 	}
 	
 	//
-	return name + QStringLiteral ("< ") + typeNames.join (QStringLiteral (", ")) + QStringLiteral (" >");
+	name += QStringLiteral ("<") + typeNames.join (QStringLiteral (", ")) + QStringLiteral (">");
+	name.replace (QStringLiteral(">>"), QStringLiteral("> >"));
 	
+	return name;
 }
 
 QString TriaASTConsumer::typeName (const clang::Type *type) {
@@ -816,12 +818,16 @@ void TriaASTConsumer::declareType (const clang::QualType &type) {
 	// it begins with "Q" (indicating it's a Qt type) and is known to the
 	// meta-system of this running tria instance.
 	QString name = typeName (type);
-	
+	QString desugared = typeName (type.getDesugaredType (*this->m_context));
 	if ((type.isPODType (*this->m_context) || name.startsWith (QLatin1Char ('Q')))
 	    && QMetaType::type (qPrintable(name)) != 0) {
 		return;
 	}
 	
+	if (name != desugared) {
+		this->m_definitions->addTypeDef (desugared, name);
+        }
+        
 	// 
 	this->m_definitions->declareType (name);
 	

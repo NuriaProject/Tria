@@ -57,11 +57,22 @@ public:
 	/** Returns the list of to-be-declared types. */
 	StringSet declareTypes () const;
 	
+	/**
+	 * Like declareTypes(), but removes all typedefs before returning
+	 * the list. \sa addTypeDef
+	 */
+	StringSet declareTypesWithoutDuplicates () const;
+	
 	/** Tells the generator to generate a metatype declaration. */
 	void declareType (const QString &type);
 	
 	/** Takes \a type out of the to-be-declared list. */
 	void undeclareType (const QString &type);
+	
+	/**
+	 * Adds a typedef from \a desugared to \a typeDef.
+	 */
+	void addTypeDef (const QString &desugared, const QString &typeDef);
 	
 	/**
 	 * Returns a list of types which should be avoided. Mainly, these
@@ -86,6 +97,7 @@ private:
 	StringSet m_declaredTypes;
 	StringSet m_declareTypes;
 	StringSet m_avoidedTypes;
+	QMap< QString, QString > m_typeDefs;
 	QVector< ClassDef > m_classes;
 	
 };

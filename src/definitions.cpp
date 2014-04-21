@@ -63,12 +63,29 @@ StringSet Definitions::declareTypes () const {
 	return this->m_declareTypes;
 }
 
+StringSet Definitions::declareTypesWithoutDuplicates () const {
+	StringSet result;
+	
+	for (const QString cur : this->m_declareTypes) {
+		if (!this->m_typeDefs.contains (cur)) {
+			result.insert (cur);
+		}
+		
+	}
+	
+	return result;
+}
+
 void Definitions::declareType (const QString &type) {
 	this->m_declareTypes.insert (type);
 }
 
 void Definitions::undeclareType (const QString &type) {
 	this->m_declareTypes.remove (type);
+}
+
+void Definitions::addTypeDef (const QString &desugared, const QString &typeDef) {
+	this->m_typeDefs.insert (typeDef, desugared);
 }
 
 StringSet Definitions::avoidedTypes () const {
