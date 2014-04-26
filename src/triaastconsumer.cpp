@@ -523,6 +523,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 	}
 	
 	// Arguments
+	bool hasMandatoryArgument = false;
 	bool canConvert = (def.type == MemberMethod);
 	for (int i = 0; i < int (decl->getNumParams ()); i++) {
 		const clang::ParmVarDecl *param = decl->getParamDecl (i);
@@ -552,6 +553,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 		// This may be a viable conversion method if it only expects a
 		// single argument (Plus optional ones)
 		canConvert = (var.isOptional || i < 1);
+		hasMandatoryArgument = !var.isOptional;
 		
 		def.arguments.append (var);
 	}
@@ -565,7 +567,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 	if (canConvert && 
 	    (def.type == ConstructorMethod ||
 	     (def.type == StaticMethod && def.name.startsWith (fromMethod)) ||
-	     (def.type == MemberMethod && def.name.startsWith (toMethod)))) {
+	     (def.type == MemberMethod && !hasMandatoryArgument && def.name.startsWith (toMethod)))) {
 		ConversionDef conv;
 		conv.methodName = def.name;
 		conv.type = def.type;
