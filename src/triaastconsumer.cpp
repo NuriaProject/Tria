@@ -501,7 +501,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 	if (ctor) {
 		def.type = ConstructorMethod;
 		def.returnType = classDef.name;
-	} else if (dtor || convDecl) {
+	} else if (dtor || convDecl || !decl->getDeclName ().isIdentifier ()) {
 		// Ignore.
 		return;
 	} else {
