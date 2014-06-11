@@ -102,7 +102,6 @@ clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, 
 	
 	ci.getFrontendOpts().SkipFunctionBodies = true;
 	ci.getPreprocessor().enableIncrementalProcessing (true);
-	ci.getPreprocessor().SetSuppressIncludeNotFoundError (true);
 	ci.getLangOpts().DelayedTemplateParsing = true;
 	
 	// Enable everything for code compatibility
