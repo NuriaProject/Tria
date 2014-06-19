@@ -67,6 +67,7 @@ struct VariableDef {
 	Annotations annotations;
 	
 	bool isConst = false;
+	bool isPodType = false;
 	bool isOptional = false;
 	bool setterReturnsBool = false;
 };
@@ -131,6 +132,8 @@ struct ClassDef {
 	bool hasDefaultCtor;
 	bool hasCopyCtor;
 	bool hasAssignmentOperator;
+	bool implementsCtor = false;
+	bool implementsCopyCtor = false;
 	
 };
 

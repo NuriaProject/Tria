@@ -640,8 +640,18 @@ void NuriaGenerator::writeAnnotationMethods (const ClassDef &def, QIODevice *dev
 static void methodDefToArgumentString (const MethodDef &m, QString &parameter, QString &arguments) {
 	for (int i = 0; i < m.arguments.length (); i++) {
 		const VariableDef &cur = m.arguments.at (i);
+		
+		if (!cur.isPodType) {
+			parameter.append ("const ");
+		}
+		
 		parameter.append (cur.type);
 		parameter.append (" ");
+		
+		if (!cur.isPodType) {
+			parameter.append ("&");
+		}
+		
 		parameter.append (cur.name);
 		arguments.append (cur.name);
 		

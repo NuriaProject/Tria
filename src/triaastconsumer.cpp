@@ -533,7 +533,8 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 		var.name = llvmToString (param->getName ());
 		var.type = typeName (param->getType ());
 		var.isOptional = param->hasDefaultArg ();
-		var.isConst = param->getType ().getQualifiers ().hasConst ();
+		var.isConst = param->getType ().isConstant (*this->m_context);
+		var.isPodType = param->getType ().isPODType (*this->m_context);
 		def.hasOptionalArguments = var.isOptional;
 		
 		// Invent a name for unnamed arguments
@@ -579,6 +580,16 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 		
 		// 
 		classDef.conversions.append (conv);
+		
+	}
+	
+	// Remember default and copy ctors for later.
+	if (ctor) {
+		if (def.arguments.isEmpty ()) {
+			classDef.implementsCtor = true;
+		} else if (def.arguments.at (0).type == classDef.name) {
+			classDef.implementsCopyCtor = true;
+		}
 		
 	}
 	
@@ -784,7 +795,50 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	}
 	
 	// Done.
+	addDefaultConstructors (classDef);
 	this->m_definitions->addClassDefinition (classDef);
+	
+}
+
+void TriaASTConsumer::addDefaultConstructors (ClassDef &classDef) {
+	if (!classDef.hasValueSemantics) {
+		return;
+	}
+	
+	// 
+	if (!classDef.implementsCopyCtor) {
+		addDefaultCopyConstructor (classDef);
+	}
+	
+	if (!classDef.implementsCtor) {
+		addDefaultConstructor (classDef);
+	}
+	
+}
+
+void TriaASTConsumer::addDefaultConstructor (ClassDef &classDef) {
+	addConstructor (classDef, { });
+}
+
+void TriaASTConsumer::addDefaultCopyConstructor (ClassDef &classDef) {
+	VariableDef argument;
+	argument.isConst = true;
+	argument.name = QStringLiteral("other");
+	argument.type = classDef.name;
+	
+	addConstructor (classDef, { argument });
+}
+
+void TriaASTConsumer::addConstructor (ClassDef &classDef, const Variables &arguments) {
+	MethodDef def;
+	def.access = clang::AS_public;
+	def.type = ConstructorMethod;
+	def.isVirtual = false;
+	def.isConst = false;
+	def.returnType = classDef.name;
+	def.arguments = arguments;
+	
+	classDef.methods.prepend (def);
 	
 }
 

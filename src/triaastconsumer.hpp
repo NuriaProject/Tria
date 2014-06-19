@@ -42,6 +42,11 @@ public:
 	void HandleTagDeclDefinition (clang::TagDecl *decl) override;
 	
 private:
+	void addDefaultConstructors (ClassDef &classDef);
+	void addDefaultConstructor (ClassDef &classDef);
+	void addDefaultCopyConstructor (ClassDef &classDef);
+	void addConstructor (ClassDef &classDef, const Variables &arguments);
+	
 	Annotations annotationsFromDecl (clang::Decl *decl);
 	QMetaType::Type typeOfAnnotationValue (const QString &valueData);
 	AnnotationDef parseNuriaAnnotate (const QString &data);
