@@ -3,6 +3,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
 add_subdirectory(src)
 
 Find_Package(LLVM REQUIRED)
+PROJECT(Tria)
 
 # Write the headers.qrc file. A Qt resources file for RCC which takes all
 # built-in headers of Clang and stores them as application resources for
