@@ -20,6 +20,9 @@
 #include <QString>
 #include <QDebug>
 
+static const char *methodTypeStr[] = { "Constructor", "Destructor", "Method", "Static" };
+static const char *accessStr[] = { "public", "protected", "private", "none" };
+
 QDebug operator<< (QDebug dbg, const AnnotationDef &annotation) {
 	dbg.nospace () << annotation.name << "(" << annotation.value << ")";
 	return dbg;

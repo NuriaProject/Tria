@@ -31,10 +31,6 @@ enum MethodType {
 	StaticMethod
 };
 
-static const char *methodTypeStr[] = { "Constructor", "Destructor",
-				       "Method", "Static" };
-static const char *accessStr[] = { "public", "protected", "private", "none" };
-
 enum AnnotationType {
 	IntrospectAnnotation,
 	SkipAnnotation,

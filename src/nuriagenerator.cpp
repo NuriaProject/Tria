@@ -708,6 +708,8 @@ void NuriaGenerator::writeMethodMethods (const ClassDef &def, QIODevice *device)
 		case MemberMethod: return QByteArrayLiteral ("Nuria::MetaMethod::Method");
 		case StaticMethod: return QByteArrayLiteral ("Nuria::MetaMethod::Static");
 		}
+		
+		return QByteArray ();
 	};
 	
 	writeMethodGeneric (def.methods, device, "Nuria::MetaMethod::Type _methodType (int index)", 

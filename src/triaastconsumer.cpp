@@ -228,7 +228,7 @@ QString TriaASTConsumer::typeDeclName (const clang::NamedDecl *decl, const clang
 	
 	// 
 	QStringList typeNames;
-	for (int i = 0; i < args.size (); i++) {
+	for (uint32_t i = 0; i < args.size (); i++) {
 		const clang::TemplateArgument &arg = args.get (i);
 		
 		if (arg.getKind () != clang::TemplateArgument::Type) {
