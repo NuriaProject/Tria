@@ -475,12 +475,15 @@ static void writeGenericSwitch (const Container &container, QIODevice *device, c
 template< typename Container, typename T >
 static void writeGenericFunction (const Container &container, QIODevice *device, const QByteArray &signature,
 				  const QByteArray &defaultResult, const QByteArray &variable,
-				  std::function< QByteArray(const T &) > func,
+				  std::function< QByteArray(const T &) > func, const QByteArray &argumentVoids,
 				  const QString &prologue = QString()) {
 	
 	device->write ("  ");
 	device->write (signature);
-	device->write (" const {\n");
+	device->write (" const {\n"
+		       "    ");
+	device->write (argumentVoids);
+	device->write ("\n");
 	
 	if (!prologue.isEmpty ()) {
 		device->write ("    ");
@@ -511,9 +514,10 @@ void NuriaGenerator::writeCountMethods (const ClassDef &def, QIODevice *device) 
 		return QByteArrayLiteral ("return ") + QByteArray::number (def.annotations.length ());
 	};
 	
-	device->write ("  int _annotationCount (int category, int index) const {\n");
-	device->write ("    switch (category) {\n");
-	device->write ("    case ObjectCategory: return ");
+	device->write ("  int _annotationCount (int category, int index) const {\n"
+		       "    (void)index;\n"
+		       "    switch (category) {\n"
+		       "    case ObjectCategory: return ");
 	device->write (QByteArray::number (def.annotations.length ()));
 	device->write (";\n");
 	device->write ("    case MethodCategory:\n");
@@ -598,6 +602,7 @@ void NuriaGenerator::writeAnnotationMethods (const ClassDef &def, QIODevice *dev
         };
 	
 	device->write ("  QByteArray _annotationName (int category, int index, int nth) const {\n"
+		       "    (void)index, (void)nth;\n"
 		       "    switch (category) {\n"
 		       "    case ObjectCategory:\n");
 	writeGenericSwitch (def.annotations, device, "nth", annotationName);
@@ -618,6 +623,7 @@ void NuriaGenerator::writeAnnotationMethods (const ClassDef &def, QIODevice *dev
 	// Nuria::MetaObject::annotationValue
 	std::function< QByteArray(const AnnotationDef &) > valueFunc = writeAnnotationValue;
 	device->write ("  QVariant _annotationValue (int category, int index, int nth) const {\n"
+		       "    (void)index, (void)nth;\n"
 		       "    switch (category) {\n"
 		       "    case ObjectCategory:\n");
 	writeGenericSwitch (def.annotations, device, "nth", valueFunc);
@@ -692,7 +698,7 @@ void NuriaGenerator::writeMethodMethods (const ClassDef &def, QIODevice *device)
 	};
 	
 	writeMethodGeneric (def.methods, device, "QByteArray _methodName (int index)", 
-			    "QByteArray ()", methodName);
+			    "QByteArray ()", methodName, "(void)index;");
 	
 	// MetaMethod::Type methodType (int index) const
 	std::function< QByteArray(const MethodDef &) > methodType = [this](const MethodDef &def) {
@@ -705,7 +711,7 @@ void NuriaGenerator::writeMethodMethods (const ClassDef &def, QIODevice *device)
 	};
 	
 	writeMethodGeneric (def.methods, device, "Nuria::MetaMethod::Type _methodType (int index)", 
-			    "Nuria::MetaMethod::Method", methodType);
+			    "Nuria::MetaMethod::Method", methodType, "(void)index;");
 	
 	
 	// QByteArray methodReturnType (int index) const
@@ -714,7 +720,7 @@ void NuriaGenerator::writeMethodMethods (const ClassDef &def, QIODevice *device)
 	};
 	
 	writeMethodGeneric (def.methods, device, "QByteArray _methodReturnType (int index)", 
-			    "QByteArray ()", returnType);
+			    "QByteArray ()", returnType, "(void)index;");
 	
 	// QVector< QByteArray > methodArgumentNames (int index) const
 	std::function< QByteArray(const MethodDef &) > argumentNames = [this](const MethodDef &def) {
@@ -742,7 +748,7 @@ void NuriaGenerator::writeMethodMethods (const ClassDef &def, QIODevice *device)
 	};
 	
 	writeMethodGeneric (def.methods, device, "QVector< QByteArray > _methodArgumentNames (int index)", 
-			    "QVector< QByteArray > ()", argumentNames);
+			    "QVector< QByteArray > ()", argumentNames, "(void)index;");
 	
 	// QVector< QByteArray > methodArgumentTypes (int index) const
 	std::function< QByteArray(const MethodDef &) > argumentTypes = [this](const MethodDef &def) {
@@ -771,7 +777,7 @@ void NuriaGenerator::writeMethodMethods (const ClassDef &def, QIODevice *device)
 	};
 	
 	writeMethodGeneric (def.methods, device, "QVector< QByteArray > _methodArgumentTypes (int index)", 
-			    "QVector< QByteArray > ()", argumentTypes);
+			    "QVector< QByteArray > ()", argumentTypes, "(void)index;");
 	
 	// Callback methodUnsafeCallback (void *instance, int index) const
 	std::function< QByteArray(const MethodDef &) > unsafeCallback = [&def, this](const MethodDef &m) {
@@ -779,7 +785,7 @@ void NuriaGenerator::writeMethodMethods (const ClassDef &def, QIODevice *device)
 	};
 	
 	writeMethodGeneric (def.methods, device, "Nuria::Callback _methodUnsafeCallback (void *__instance, int index)", 
-			    "Nuria::Callback ()", unsafeCallback);
+			    "Nuria::Callback ()", unsafeCallback, "(void)__instance, (void)index;");
 	
 	// Callback methodCallback (void *instance, int index) const
 	std::function< QByteArray(const MethodDef &) > callback = [&def, this](const MethodDef &m) {
@@ -787,7 +793,7 @@ void NuriaGenerator::writeMethodMethods (const ClassDef &def, QIODevice *device)
 	};
 	
 	writeMethodGeneric (def.methods, device, "Nuria::Callback _methodCallback (void *__instance, int index)", 
-			    "Nuria::Callback ()", callback);
+			    "Nuria::Callback ()", callback, "(void)__instance, (void)index;");
 	
 	// bool methodArgumentTest (void *instance, int index) const
 	std::function< QByteArray(const MethodDef &) > argumentTest = [&def, this](const MethodDef &m) {
@@ -795,7 +801,7 @@ void NuriaGenerator::writeMethodMethods (const ClassDef &def, QIODevice *device)
 	};
 	
 	writeMethodGeneric (def.methods, device, "Nuria::Callback _methodArgumentTest (void *__instance, int index)", 
-			    "Nuria::Callback ()", argumentTest);
+			    "Nuria::Callback ()", argumentTest, "(void)__instance, (void)index;");
 	
 }
 
@@ -806,7 +812,8 @@ void NuriaGenerator::writeFieldMethods (const ClassDef &def, QIODevice *device) 
 		return toByteArray (var.name);
 	};
 	
-	writeFieldGeneric (def.variables, device, "QByteArray _fieldName (int index)", "QByteArray ()", fieldName);
+	writeFieldGeneric (def.variables, device, "QByteArray _fieldName (int index)", "QByteArray ()",
+			   "(void)index;", fieldName);
 	
 	// Nuria::MetaField::Access fieldAccess (int index) const
 	std::function< QByteArray(const VariableDef &) > fieldAccess = [this](const VariableDef &var) {
@@ -818,14 +825,15 @@ void NuriaGenerator::writeFieldMethods (const ClassDef &def, QIODevice *device) 
 	};
 	
 	writeFieldGeneric (def.variables, device, "Nuria::MetaField::Access _fieldAccess (int index)",
-			   "Nuria::MetaField::NoAccess", fieldAccess);
+			   "Nuria::MetaField::NoAccess", "(void)index;", fieldAccess);
 	
 	// QByteArray fieldType (int index) const
 	std::function< QByteArray(const VariableDef &) > fieldType = [this](const VariableDef &var) {
 		return toByteArray (var.type);
 	};
 	
-	writeFieldGeneric (def.variables, device, "QByteArray _fieldType (int index)", "QByteArray ()", fieldType);
+	writeFieldGeneric (def.variables, device, "QByteArray _fieldType (int index)", "QByteArray ()",
+			   "(void)index;", fieldType);
 	
 	// QVariant fieldRead (int index, void *instance) const
 	std::function< QByteArray(const VariableDef &) > fieldRead = [&def, this](const VariableDef &var) {
@@ -833,7 +841,7 @@ void NuriaGenerator::writeFieldMethods (const ClassDef &def, QIODevice *device) 
 	};
 	
 	writeFieldGeneric (def.variables, device, "QVariant _fieldRead (int index, void *instance)",
-			   "QVariant ()", fieldRead);
+			   "QVariant ()", "(void)index;", fieldRead);
 	
 	// bool fieldWrite (int index, void *instance, const QVariant &value) const
 	std::function< QByteArray(const VariableDef &) > fieldWrite = [&def, this](const VariableDef &var) {
@@ -842,7 +850,7 @@ void NuriaGenerator::writeFieldMethods (const ClassDef &def, QIODevice *device) 
 	
 	writeGenericFunction (def.variables, device,
 		      "bool _fieldWrite (int index, void *__instance, const QVariant &__value)",
-		      "false", "index", fieldWrite);
+		      "false", "index", fieldWrite, "(void)index, (void)__instance, (void)__value;");
 	
 }
 
@@ -853,14 +861,16 @@ void NuriaGenerator::writeEnumMethods (const ClassDef &def, QIODevice *device) {
 		return QByteArrayLiteral ("return ") + toByteArray (e.name);
 	};
 	
-	writeGenericFunction (def.enums, device, "QByteArray _enumName (int index)", "QByteArray ()", "index", enumName);
+	writeGenericFunction (def.enums, device, "QByteArray _enumName (int index)", "QByteArray ()",
+			      "index", enumName, "(void)index;");
 	
 	// int enumElementCount (int index) const
 	std::function< QByteArray(const EnumDef &) > enumCount = [this](const EnumDef &e) {
 		return QByteArrayLiteral ("return ") + QByteArray::number (e.elements.size ());
 	};
 	
-	writeGenericFunction (def.enums, device, "int _enumElementCount (int index)", "-1", "index", enumCount);
+	writeGenericFunction (def.enums, device, "int _enumElementCount (int index)", "-1", "index", enumCount,
+			      "(void)index;");
 	
 	// QByteArray enumElementKey (int index, int at) const
 	std::function< QByteArray(const EnumDef &) > enumKey = [def, this](const EnumDef &e) {
@@ -882,7 +892,7 @@ void NuriaGenerator::writeEnumMethods (const ClassDef &def, QIODevice *device) {
 	};
 	
 	writeGenericFunction (def.enums, device, "QByteArray _enumElementKey (int index, int at)",
-			    "QByteArray ()", "index", enumKey);
+			    "QByteArray ()", "index", enumKey, "(void)index, (void)at;");
 	
 	// int enumElementValue (int index, int at) const
 	std::function< QByteArray(const EnumDef &) > enumValue = [def, this](const EnumDef &e) {
@@ -906,7 +916,7 @@ void NuriaGenerator::writeEnumMethods (const ClassDef &def, QIODevice *device) {
 	};
 	
 	writeGenericFunction (def.enums, device, "int _enumElementValue (int index, int at)",
-			    "-1", "index", enumValue);
+			    "-1", "index", enumValue, "(void)index, (void)at;");
 	
 }
 
@@ -982,37 +992,26 @@ void NuriaGenerator::writeGateCallMethod (const ClassDef &def, QIODevice *device
 }
 
 void NuriaGenerator::writeMethodGeneric (const Methods &methods, QIODevice *device, const QByteArray &signature,
-				    const QByteArray &defaultResult,
-				    std::function< QByteArray(const MethodDef &) > func,
-				    const QString &prologue) {
+					 const QByteArray &defaultResult,
+					 std::function< QByteArray(const MethodDef &) > func,
+					 const QByteArray &argumentVoids, const QString &prologue) {
 	std::function< QByteArray(const MethodDef &) > returner = [&func] (const MethodDef &m) {
 		return QByteArrayLiteral ("return ") + func (m);
 	};
 	
-	writeGenericFunction (methods, device, signature, defaultResult, "index", returner, prologue);
+	writeGenericFunction (methods, device, signature, defaultResult,
+			      "index", returner, argumentVoids, prologue);
 	
 }
 
 void NuriaGenerator::writeFieldGeneric (const Variables &variables, QIODevice *device, const QByteArray &signature,
-				   const QByteArray &defaultResult,
+				   const QByteArray &defaultResult, const QByteArray &argumentVoids,
 				   std::function< QByteArray (const VariableDef &) > func) {
 	std::function< QByteArray(const VariableDef &) > returner = [&func] (const VariableDef &v) {
 		return QByteArrayLiteral ("return ") + func (v);
 	};
 	
-	writeGenericFunction (variables, device, signature, defaultResult, "index", returner);
-	
-}
-
-
-void NuriaGenerator::writeEnumGeneric (const Enums &enums, QIODevice *device, const QByteArray &signature,
-				  const QByteArray &defaultResult,
-				  std::function< QByteArray (const EnumDef &) > func) {
-	std::function< QByteArray(const EnumDef &) > returner = [&func] (const EnumDef &v) {
-	        return QByteArrayLiteral ("return ") + func (v);
-        };
-        
-        writeGenericFunction (enums, device, signature, defaultResult, "index", returner);
+	writeGenericFunction (variables, device, signature, defaultResult, "index", returner, argumentVoids);
 	
 }
 
