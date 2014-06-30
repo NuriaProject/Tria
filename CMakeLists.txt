@@ -1,8 +1,13 @@
-cmake_minimum_required(VERSION 2.8)
-set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
-add_subdirectory(src)
+# CMake file for NuriaTria
+# Source: https://github.com/NuriaProject/Tria
 
+cmake_minimum_required(VERSION 2.8.8)
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
+
+find_package(Qt5Core REQUIRED)
 Find_Package(LLVM REQUIRED)
+Find_Package(Clang REQUIRED)
+set(CMAKE_AUTOMOC ON)
 PROJECT(Tria)
 
 # Write the headers.qrc file. A Qt resources file for RCC which takes all
@@ -20,5 +25,35 @@ foreach(BUILTIN_HEADER ${BUILTINS_HEADERS})
 endforeach()
 file(APPEND headers.qrc "</qresource>\n</RCC>")
 
-# 
-INSTALL(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/src/tria DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/../bin)
+# Paths ..
+include_directories(${CLANG_INCLUDE_DIRS})
+link_directories(${LLVM_LIB_DIR})
+
+# Include the qrc pointing to the internal Clang headers
+qt5_add_resources(qrc_headers.cpp ../headers.qrc)
+
+# Sources
+SET(Tria_SRC
+    src/definitions.cpp
+    src/definitions.hpp
+    src/defs.cpp
+    src/defs.hpp
+    src/jsongenerator.cpp
+    src/jsongenerator.hpp
+    src/main.cpp
+    src/nuriagenerator.cpp
+    src/nuriagenerator.hpp
+    src/triaastconsumer.cpp
+    src/triaastconsumer.hpp
+)
+
+# Build target
+add_executable(tria ${Tria_SRC})
+target_link_libraries(tria ${CLANG_LIBS} ${LLVM_LIBS_CORE} ${LLVM_LDFLAGS})
+qt5_use_modules(tria Core)
+
+LIST(APPEND CMAKE_CXX_FLAGS "-std=c++11 -Wall")
+ADD_DEFINITIONS("-D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS ")
+
+# Install target
+INSTALL(TARGETS tria DESTINATION bin)
