@@ -1,14 +1,16 @@
 # CMake file for NuriaTria
 # Source: https://github.com/NuriaProject/Tria
-
 cmake_minimum_required(VERSION 2.8.8)
+
+# Base configuration
+PROJECT(Tria)
+
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
 
 find_package(Qt5Core REQUIRED)
 Find_Package(LLVM REQUIRED)
 Find_Package(Clang REQUIRED)
 set(CMAKE_AUTOMOC ON)
-PROJECT(Tria)
 
 # Write the headers.qrc file. A Qt resources file for RCC which takes all
 # built-in headers of Clang and stores them as application resources for
