@@ -144,7 +144,7 @@ static bool openStdoutOrFile (QFile &device, const QString &path, QIODevice::Ope
 }
 
 static QVector< QByteArray > mapVirtualFiles (clang::tooling::ToolInvocation &tool,
-								const QDir &directory, const QString &prefix) {
+                                              const QDir &directory, const QString &prefix) {
 	QVector< QByteArray > buffers;
 	
 	QStringList builtinHeaders = directory.entryList (QDir::Files);
