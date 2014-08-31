@@ -6,6 +6,7 @@ cmake_minimum_required(VERSION 2.8.8)
 PROJECT(Tria)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
+SET(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 find_package(Qt5Core REQUIRED)
 Find_Package(LLVM REQUIRED)
@@ -61,3 +62,6 @@ ADD_DEFINITIONS(-D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS)
 
 # Install target
 INSTALL(TARGETS tria DESTINATION bin/)
+
+# Note: 'tst_ignored.hpp' left out intentionally
+add_unittest(NAME tst_tria SOURCES tst_header.hpp)
