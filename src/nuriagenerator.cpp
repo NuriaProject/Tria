@@ -35,8 +35,12 @@ NuriaGenerator::NuriaGenerator (Definitions *definitions)
 	
 }
 
-static QByteArray escapeName (QString name) {
+static QString escapeNameString (QString name) {
 	return name.replace (QRegExp ("[^A-Za-z0-9]"), "_").toLatin1 ();
+}
+
+static QByteArray escapeName (const QString &name) {
+	return escapeNameString (name).toLatin1 ();
 }
 
 static QByteArray identPrefix (QString name) {
@@ -60,7 +64,9 @@ bool NuriaGenerator::generate (QIODevice *device) {
 	writeHeader (device);
 	
 	// #include the processed file itself and go into our namespace
-	device->write ("#include <nuria/metaobject.hpp>\n"
+	device->write ("/* For access to private QMetaType methods. */\n"
+	               "#define Q_NO_TEMPLATE_FRIENDS\n"
+	               "#include <nuria/metaobject.hpp>\n"
 		       "#include <nuria/variant.hpp>\n"
 		       "#include <QByteArray>\n"
 		       "#include <QMetaType>\n"
@@ -234,54 +240,65 @@ void NuriaGenerator::writeMemberConverters (const ClassDef &def, QIODevice *devi
 }
 
 void NuriaGenerator::writeMemberConverter (const ConversionDef &def, QIODevice *device) {
-	QByteArray from = escapeName (def.fromType);
-	QByteArray to = escapeName (def.toType);
 	
-	device->write ("inline static ");
-	device->write (def.toType.toLatin1 ());
-	device->write (" *tria_convert_");
-	device->write (from);
-	device->write ("_to_");
-	device->write (to);
-	device->write (" (const ");
-	device->write (def.fromType.toLatin1 ());
-	device->write (" &value) {\n");
+	// 'toX()' or 'operator X' function
+	static QString templ = QStringLiteral("inline static bool nuria_convert_%6_to_%7 "
+	                                      "(const QtPrivate::AbstractConverterFunction *, "
+	                                      "const void *in, void *out) {\n"
+	                                      "  const %1 *from = static_cast< const %1 * > (in);\n"
+	                                      "  %2 *to = static_cast< %2 * > (out);\n"
+	                                      "  %3"
+	                                      "  *to = (%4).%5 ();\n"
+	                                      "  return true;\n"
+	                                      "}\n\n");
+	
+	static QString copyTempl = QStringLiteral("%1 copy (*from);");
+	
+	// 
+	QString copy;
+	QString variable = QStringLiteral("*from");
 	if (!def.isConst) {
-		device->write ("    ");
-		device->write (def.fromType.toLatin1 ());
-		device->write (" temp (value);\n");
+		copy = copyTempl.arg (def.fromType);
+		variable = QStringLiteral("copy");
 	}
 	
-	device->write ("    return new ");
-	device->write (def.toType.toLatin1 ());
-	device->write (!def.isConst ? " (temp." : " (value.");
-	device->write (def.methodName.toLatin1 ());
-	device->write (" ());\n"
-		       "}\n\n");
-	
+	// Generate code
+	QString escapedFrom = escapeNameString (def.fromType);
+	QString escapedTo = escapeNameString (def.toType);
+	QString code = templ.arg (def.fromType, def.toType, copy, variable,
+	                          def.methodName, escapedFrom, escapedTo);
+	device->write (code.toLatin1 ());
 }
 
 void NuriaGenerator::writeStaticConverter (const ConversionDef &def, QIODevice *device) {
-	QByteArray from = escapeName (def.fromType);
-	QByteArray to = escapeName (def.toType);
 	
-	device->write ("inline static ");
-	device->write (def.toType.toLatin1 ());
-	device->write (" *tria_convert_");
-	device->write (from);
-	device->write ("_to_");
-	device->write (to);
-	device->write (" (const ");
-	device->write (def.fromType.toLatin1 ());
-	device->write (" &value) {\n"
-		       "    return new ");
-	device->write (def.toType.toLatin1 ());
-	device->write (" (");
-	device->write (def.toType.toLatin1 ());
-	device->write ("::");
-	device->write (def.methodName.toLatin1 ());
-	device->write (" (value));\n"
-		       "}\n\n");
+	// 'fromX()' function
+	static QString templ = QStringLiteral("inline static bool nuria_convert_%6_to_%7 "
+	                                      "(const QtPrivate::AbstractConverterFunction *, "
+	                                      "const void *in, void *out) {\n"
+	                                      "  const %1 *from = static_cast< const %1 * > (in);\n"
+	                                      "  %2 *to = static_cast< %2 * > (out);\n"
+	                                      "  %3"
+	                                      "  *to = %2::%4 (%5);\n"
+	                                      "  return true;\n"
+	                                      "}\n\n");
+	
+	static QString copyTempl = QStringLiteral("%1 copy (*from);");
+	
+	// 
+	QString copy;
+	QString variable = QStringLiteral("*from");
+	if (!def.isConst) {
+		copy = copyTempl.arg (def.fromType);
+		variable = QStringLiteral("copy");
+	}
+	
+	// Generate code
+	QString escapedFrom = escapeNameString (def.fromType);
+        QString escapedTo = escapeNameString (def.toType);
+	QString code = templ.arg (def.fromType, def.toType, copy, def.methodName,
+	                          variable, escapedFrom, escapedTo);
+	device->write (code.toLatin1 ());
 	
 }
 
@@ -335,20 +352,30 @@ void NuriaGenerator::writeConversionRegisterers (const ClassDef &def, QIODevice 
 	}
 	
 	for (const ConversionDef &cur : def.conversions) {
-		device->write ("    Nuria::Variant::registerConversion");
 		
-		if (cur.type == ConstructorMethod) { // Constructor
-			device->write ("< ");
+		// For constructors, the default implicit conversion suffices.
+		if (cur.type == ConstructorMethod) {
+			device->write ("    QMetaType::registerConverter< ");
 			device->write (cur.fromType.toLatin1 ());
 			device->write (", ");
 			device->write (cur.toType.toLatin1 ());
 			device->write (" > ();\n");
-		} else if (cur.type == MemberMethod || cur.type == StaticMethod) { // to*
-			device->write (" (&tria_convert_");
-			device->write (escapeName (cur.fromType));
-			device->write ("_to_");
-			device->write (escapeName (cur.toType));
-			device->write (");\n");
+		} else if (cur.type == MemberMethod || cur.type == StaticMethod) { // toX or fromX
+			QByteArray name = escapeName (cur.fromType) + QByteArrayLiteral("_to_") +
+			                  escapeName (cur.toType);
+			
+			device->write ("    static QtPrivate::AbstractConverterFunction ");
+			device->write (name);
+			device->write ("(&nuria_convert_");
+			device->write (name);
+			device->write (");\n"
+			               "    QMetaType::registerConverterFunction (&");
+			device->write (name);
+			device->write (", qMetaTypeId< ");
+			device->write (cur.fromType.toLatin1 ());
+			device->write (" > (), qMetaTypeId< ");
+		        device->write (cur.toType.toLatin1 ());
+			device->write (" > ());\n");
 		}
 		
 	}
@@ -1152,8 +1179,8 @@ QByteArray NuriaGenerator::generateSetter (const ClassDef &def, const VariableDe
 	} else if (var.setter.isEmpty () && requirement.isEmpty ()) {
 		QString s ("\n"
 			   "      if (__value.userType () != qMetaTypeId< %1 > ()) {\n"
-			   "        QVariant __v = Nuria::Variant::convert (__value, qMetaTypeId< %1 > ());\n"
-			   "        if (!__v.isValid ()) { return false; }\n"
+			   "        QVariant __v (__value);\n"
+			   "        if (!__v.convert (qMetaTypeId< %1 > ())) { return false; }\n"
 			   "        reinterpret_cast< %2 * > (__instance)->%3 = __v.value< %1 > ();\n"
 			   "      } else {\n"
 			   "        reinterpret_cast< %2 * > (__instance)->%3 = __value.value< %1 > ();\n"
@@ -1161,9 +1188,8 @@ QByteArray NuriaGenerator::generateSetter (const ClassDef &def, const VariableDe
 		return s.arg (var.type, def.name, var.name).toLatin1 ();
 	} else if (var.setter.isEmpty () && !requirement.isEmpty ()) {
 		QString s ("{\n"
-			   "      QVariant __v = (__value.userType () != qMetaTypeId< %1 > ())\n"
-			   "      ? Nuria::Variant::convert (__value, qMetaTypeId< %1 > ()) : __value;\n"
-			   "      if (__v.userType () != qMetaTypeId< %1 > () && !__v.isValid ()) { return false; }\n"
+			   "      QVariant __v (__value);\n"
+			   "      if (!__v.convert (qMetaTypeId< %1 > ())) { return false; }\n"
 			   "      %1 %4 = __v.value< %1 > ();\n"
 			   "      %6\n"
 			   "      if (!%5) { return false; }\n"
@@ -1174,8 +1200,8 @@ QByteArray NuriaGenerator::generateSetter (const ClassDef &def, const VariableDe
 	} else if (!var.setter.isEmpty () && requirement.isEmpty ()) {
 		QString s ("\n"
 		           "      if (__value.userType () != qMetaTypeId< %1 > ()) {\n"
-		           "        QVariant __v = Nuria::Variant::convert (__value, qMetaTypeId< %1 > ());\n"
-		           "        if (!__v.isValid ()) { return false; }\n"
+		           "        QVariant __v (__value);\n"
+			   "        if (!__v.convert (qMetaTypeId< %1 > ())) { return false; }\n"
 		           "        reinterpret_cast< %2 * > (__instance)->%3 (__v.value< %1 > ());\n"
 		           "      } else {\n"
 		           "        %4reinterpret_cast< %2 * > (__instance)->%3 (__value.value< %1 > ());\n"
@@ -1184,9 +1210,8 @@ QByteArray NuriaGenerator::generateSetter (const ClassDef &def, const VariableDe
 	        return s.arg (var.type, def.name, var.setter, ret).toLatin1 ();
 	} else if (!var.setter.isEmpty () && !requirement.isEmpty ()) {
 		QString s ("{\n"
-			   "      QVariant __v = (__value.userType () != qMetaTypeId< %1 > ())\n"
-			   "      ? Nuria::Variant::convert (__value, qMetaTypeId< %1 > ()) : __value;\n"
-			   "      if (__v.userType () != qMetaTypeId< %1 > () && !__v.isValid ()) { return false; }\n"
+		           "      QVariant __v (__value);\n"
+			   "      if (!__v.convert (qMetaTypeId< %1 > ())) { return false; }\n"
 			   "      %1 %4 = __v.value< %1 > ();\n"
 			   "      %7\n"
 			   "      if (!%5) { return false; }\n"
