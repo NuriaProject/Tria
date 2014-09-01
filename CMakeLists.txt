@@ -57,7 +57,6 @@ add_executable(tria ${Tria_SRC} ${RESOURCE_SOURCES})
 target_link_libraries(tria ${CLANG_LIBS} ${LLVM_LIBS_CORE} ${LLVM_LDFLAGS})
 qt5_use_modules(tria Core)
 
-LIST(APPEND CMAKE_CXX_FLAGS "-std=c++11 -Wall")
 ADD_DEFINITIONS(-D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS)
 
 # Install target
