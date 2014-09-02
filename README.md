@@ -24,7 +24,7 @@ For the C++ generator:
 - Construction and destroying of types unknown at compile-time
 - Automatic registration of types at load-time
 - Automatic registration in the Qt meta system
-- Automatic registration of conversion methods (For use with Nuria::Variant)
+- Automatic registration of conversion methods (For use with QVariant::convert)
 - Custom annotations with a value of arbitary type
 - Not dependent on a base-type
 - Ability to discover types at run-time based on inheritance or annotations (See Nuria::MetaObject)
