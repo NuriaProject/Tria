@@ -36,6 +36,7 @@
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Tooling/Tooling.h>
 #include <clang/AST/ASTContext.h>
+#include <clang/Basic/Version.h>
 #include <clang/Driver/Driver.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/Driver/Tool.h>
@@ -208,13 +209,22 @@ int main (int argc, const char **argv) {
 	const char *helpTitle = "Tria by the NuriaProject, built on " __DATE__ " " __TIME__;
 	llvm::cl::ParseCommandLineOptions (argc, argv, helpTitle);
 	
-	// Always include built-in headers
+	// Inject absolute path to the clang headers on linux.
+	// Should we bundle those too? Would add another 1.5MiB ..
+#ifdef Q_OS_LINUX
+	arguments.push_back ("-isystem");
+	arguments.push_back (LLVM_PREFIX "/lib/clang/" CLANG_VERSION_STRING "/include");
+#else
+	// For other OSes
 	arguments.push_back ("-I/builtins");
+#endif
+	
+	// Append user-supplied arguments
 	passThroughClangOptions (arguments);
 	arguments.push_back (argInputFile);
 	
 	// 
-	clang::FileManager *fm = new clang::FileManager ({"."});
+	clang::FileManager *fm = new clang::FileManager ({ "." });
 	
 	// Create tool instance
 	Definitions definitions (QString::fromStdString (argInputFile));
