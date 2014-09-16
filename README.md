@@ -15,6 +15,11 @@ Build-time:
 Run-time:
 - Qt5
 
+Additionally, starting with Clang3.5, libClang depends on:
+- pthread
+- zlib
+- libcurses
+
 Features
 --------
 
