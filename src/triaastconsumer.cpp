@@ -19,6 +19,7 @@
 
 #include <clang/AST/DeclTemplate.h>
 #include <clang/AST/ASTContext.h>
+#include <clang/Basic/Version.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/Attr.h>
 
@@ -469,6 +470,14 @@ bool TriaASTConsumer::registerReadWriteMethod (ClassDef &classDef, MethodDef &de
 	return true;
 }
 
+static inline clang::QualType getMethodResultType (clang::CXXMethodDecl *decl) {
+#if CLANG_VERSION_MINOR > 4
+	return decl->getReturnType ();
+#else
+	return decl->getResultType ();
+#endif
+}
+
 void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl) {
 	static const QString fromMethod = QStringLiteral ("from");
 	static const QString toMethod = QStringLiteral ("to");
@@ -486,7 +495,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 	def.annotations = annotationsFromDecl (decl);
 	
 	// Skip non-public methods. skipped methods and methods which are default-implemented
-	bool resultTypeHasValueSemantics = hasTypeValueSemantics (decl->getResultType ());
+	bool resultTypeHasValueSemantics = hasTypeValueSemantics (getMethodResultType (decl));
 	if (def.access != clang::AS_public || decl->isDefaulted () || decl->isDeleted () ||
 	    !resultTypeHasValueSemantics || containsAnnotation (def.annotations, skipAnnotation)) {
 		
@@ -505,7 +514,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 		// Ignore.
 		return;
 	} else {
-		clang::QualType resultType = decl->getResultType ();
+		clang::QualType resultType = getMethodResultType (decl);
 		def.name = llvmToString (decl->getName ());
 		def.returnType = typeName (resultType);
 		def.type = decl->isStatic () ? StaticMethod : MemberMethod;
@@ -518,7 +527,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 		}
 		
 		// Also register result-type in the meta-system later on!
-		declareType (decl->getResultType ());
+		declareType (resultType);
 		
 	}
 	
@@ -854,9 +863,14 @@ void TriaASTConsumer::reportMessage (clang::DiagnosticsEngine::Level level, clan
 				     const QByteArray &info) {
 	llvm::StringRef message (info.constData (), info.length ());
 	clang::DiagnosticsEngine &diag = this->m_context->getDiagnostics ();
-	
+
+#if CLANG_VERSION_MINOR > 4
+	clang::StoredDiagnostic stored (level, clang::Diagnostic (&diag, message));
+	diag.Report (stored);
+#else
 	unsigned int id = diag.getCustomDiagID (level, message);
 	diag.Report (loc, id);
+#endif
 	
 }
 

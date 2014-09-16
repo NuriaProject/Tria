@@ -57,6 +57,11 @@ add_executable(tria ${Tria_SRC} ${RESOURCE_SOURCES})
 target_link_libraries(tria ${CLANG_LIBS} ${LLVM_LIBS_CORE} ${LLVM_LDFLAGS})
 qt5_use_modules(tria Core)
 
+# Clang3.5 compatibility. Shouldn't break linking against Clang3.4
+if(UNIX)
+  target_link_libraries(tria -lpthread -lz -ldl -lcurses)
+endif()
+
 ADD_DEFINITIONS(-D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS)
 
 # Install target
