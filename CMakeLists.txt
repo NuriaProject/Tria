@@ -13,7 +13,6 @@ SET(CMAKE_INCLUDE_CURRENT_DIR ON)
 find_package(Qt5Core REQUIRED)
 Find_Package(LLVM REQUIRED)
 Find_Package(Clang REQUIRED)
-find_package(NuriaCore)
 set(CMAKE_AUTOMOC ON)
 
 set(RESOURCE "${CMAKE_BINARY_DIR}/tria_headers.qrc")
@@ -36,7 +35,6 @@ file(APPEND ${RESOURCE} "</qresource>\n</RCC>")
 # Paths ..
 include_directories(${CLANG_INCLUDE_DIRS})
 link_directories(${LLVM_LIB_DIR})
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../Core/src")
 
 # Include the qrc pointing to the internal Clang headers
 qt5_add_resources(RESOURCE_SOURCES ${RESOURCE})
@@ -74,5 +72,4 @@ INSTALL(EXPORT triaConfig DESTINATION lib/cmake/tria)
 
 export(TARGETS tria FILE "${NURIA_CMAKE_PREFIX}/triaConfig.cmake")
 
-# Note: 'tst_ignored.hpp' left out intentionally
-add_unittest(NAME tst_tria SOURCES tst_header.hpp)
+# Tests are included in NuriaCore as they depend on Core, while tria does not.
