@@ -275,7 +275,7 @@ int main (int argc, const char **argv) {
 	// Lua generator
 	LuaGenerator luaGenerator (&definitions);
 	for (const std::string &config : argLuaGenerators) {
-		if (!luaGenerator.generate (config)) {
+		if (!luaGenerator.generate (config, argInputFile)) {
 			return 4;
 		}
 		

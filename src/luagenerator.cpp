@@ -17,10 +17,12 @@
 
 #include "luagenerator.hpp"
 
+#include <QDateTime>
 #include <memory>
 #include <QDebug>
 #include <QFile>
 
+#include <clang/Tooling/Tooling.h>
 #include "definitions.hpp"
 #include <lua.hpp>
 #include <cstdio>
@@ -71,7 +73,7 @@ static bool parseConfig (const std::string &config, QByteArray &luaFile, QByteAr
 	return true;
 }
 
-bool LuaGenerator::generate (const std::string &config) {
+bool LuaGenerator::generate (const std::string &config, const std::string &sourceName) {
 	QByteArray luaFile;
 	QByteArray outFile;
 	
@@ -95,12 +97,14 @@ bool LuaGenerator::generate (const std::string &config) {
 	}
 	
 	// 
-	return runScript (luaFile, scriptFile.readAll (), &outHandle);
+	QByteArray sourceFile (sourceName.c_str (), sourceName.length ());
+	return runScript (sourceFile, outFile, luaFile, scriptFile.readAll (), &outHandle);
 }
 
-bool LuaGenerator::runScript (const QByteArray &scriptName, const QByteArray &script, QFile *outFile) {
+bool LuaGenerator::runScript (const QByteArray &soucePath, const QByteArray &outPath, const QByteArray &scriptName,
+                              const QByteArray &script, QFile *outFile) {
 	std::unique_ptr< lua_State, decltype(&lua_close) > lua (lua_open (), &lua_close);
-	initState (lua.get (), outFile);
+	initState (lua.get (), soucePath, outPath, outFile);
 	exportDefinitions (lua.get ());
 	
 	// Execute script
@@ -116,13 +120,49 @@ bool LuaGenerator::runScript (const QByteArray &scriptName, const QByteArray &sc
 	return true;
 }
 
-void LuaGenerator::initState (lua_State *lua, QFile *file) {
+void LuaGenerator::initState (lua_State *lua, const QByteArray &sourceFile,
+                              const QByteArray &outFile, QFile *file) {
 	luaL_openlibs (lua);
 	
 	// 
 	addLog (lua);
 	addWrite (lua, file);
+	addInformation (lua, sourceFile, outFile);
 	
+}
+
+static inline void insertString (lua_State *lua, const char *name, const QString &string) {
+	lua_pushstring (lua, string.toUtf8 ().constData ());
+	lua_setfield (lua, -2, name);
+}
+
+static inline void insertBool (lua_State *lua, const char *name, bool value) {
+	lua_pushboolean (lua, value);
+	lua_setfield (lua, -2, name);
+}
+
+void LuaGenerator::addInformation (lua_State *lua, const QByteArray &sourceFile,
+                                   const QByteArray &outFile) {
+	lua_createtable (lua, 0, 6);
+	
+	lua_pushliteral(lua, __TIME__);
+	lua_setfield (lua, -2, "compileTime");
+	
+	lua_pushliteral(lua, __DATE__);
+	lua_setfield (lua, -2, "compileDate");
+	
+	lua_pushliteral(lua, QT_STRINGIFY(LLVM_VERSION_MAJOR) "." QT_STRINGIFY(LLVM_VERSION_MINOR));
+	lua_setfield (lua, -2, "llvmVersion");
+	
+	lua_pushstring (lua, sourceFile.constData ());
+	lua_setfield (lua, -2, "sourceFile");
+	
+	lua_pushstring (lua, outFile.constData ());
+	lua_setfield (lua, -2, "outFile");
+	
+	insertString (lua, "currentDateTime", QDateTime::currentDateTime ().toString (Qt::ISODate));
+	
+	lua_setfield (lua, LUA_GLOBALSINDEX, "tria");
 }
 
 static const char *logLevelName (int level) {
@@ -323,16 +363,6 @@ static void pushAccessSpecifier (lua_State *lua, clang::AccessSpecifier spec) {
 		lua_pushnil (lua);
 	}
 	
-}
-
-static inline void insertString (lua_State *lua, const char *name, const QString &string) {
-	lua_pushstring (lua, string.toUtf8 ().constData ());
-	lua_setfield (lua, -2, name);
-}
-
-static inline void insertBool (lua_State *lua, const char *name, bool value) {
-	lua_pushboolean (lua, value);
-	lua_setfield (lua, -2, name);
 }
 
 void LuaGenerator::exportBases (lua_State *lua, const Bases &bases) {

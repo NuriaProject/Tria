@@ -27,13 +27,15 @@ class LuaGenerator {
 public:
 	LuaGenerator (Definitions *definitions);
 	
-	bool generate (const std::string &config);
+	bool generate (const std::string &config, const std::string &sourceName);
 	
 private:
 	
-	bool runScript (const QByteArray &scriptName, const QByteArray &script, QFile *outFile);
+	bool runScript (const QByteArray &soucePath, const QByteArray &outPath, const QByteArray &scriptName,
+	                const QByteArray &script, QFile *outFile);
 	
-	void initState (lua_State *lua, QFile *file);
+	void initState (lua_State *lua, const QByteArray &sourceFile, const QByteArray &outFile, QFile *file);
+	void addInformation (lua_State *lua, const QByteArray &sourceFile, const QByteArray &outFile);
 	void addLog (lua_State *lua);
 	void addWrite (lua_State *lua, QFile *file);
 	
