@@ -7,6 +7,7 @@ PROJECT(Tria)
 
 cmake_policy(SET CMP0020 NEW)
 
+# 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
 SET(CMAKE_INCLUDE_CURRENT_DIR ON)
 
@@ -45,18 +46,21 @@ SET(Tria_SRC
     src/definitions.hpp
     src/defs.cpp
     src/defs.hpp
+    src/main.cpp
     src/jsongenerator.cpp
     src/jsongenerator.hpp
-    src/main.cpp
     src/nuriagenerator.cpp
     src/nuriagenerator.hpp
+    src/luagenerator.cpp
+    src/luagenerator.hpp
     src/triaastconsumer.cpp
     src/triaastconsumer.hpp
 )
 
 # Build target
 add_executable(tria ${Tria_SRC} ${RESOURCE_SOURCES})
-target_link_libraries(tria ${CLANG_LIBS} ${LLVM_LIBS_CORE} ${LLVM_LDFLAGS})
+target_link_libraries(tria LuaJit ${CLANG_LIBS} ${LLVM_LIBS_CORE} ${LLVM_LDFLAGS})
+target_include_directories(tria PRIVATE ${LUAJIT_INCLUDE_DIR})
 qt5_use_modules(tria Core)
 
 # Clang3.5 compatibility. Shouldn't break linking against Clang3.4

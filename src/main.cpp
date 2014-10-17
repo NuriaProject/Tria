@@ -46,6 +46,7 @@
 #include "triaastconsumer.hpp"
 #include "nuriagenerator.hpp"
 #include "jsongenerator.hpp"
+#include "luagenerator.hpp"
 #include "definitions.hpp"
 
 // Command-line arguments
@@ -67,6 +68,8 @@ cl::opt< bool > argInspectAll ("introspect-all", cl::ValueDisallowed,
 cl::list< std::string > argInspectBases ("introspect-inheriting", cl::CommaSeparated,
 					 cl::desc ("Introspect all types which inherit <type>."),
 					 cl::value_desc ("type1,typeN,..."));
+cl::list< std::string > argLuaGenerators ("lua-generator", cl::desc ("Lua generator script"),
+                                          cl::value_desc ("script:outfile"));
 cl::list< std::string > argIncludeDirs ("I", cl::Prefix, cl::desc ("Additional search path"), cl::value_desc ("path"));
 cl::list< std::string > argDefines ("D", cl::Prefix, cl::desc ("#define"), cl::value_desc ("name[=value]"));
 cl::list< std::string > argUndefines ("U", cl::Prefix, cl::desc ("#undef"), cl::value_desc ("name"));
@@ -265,6 +268,15 @@ int main (int argc, const char **argv) {
 		if (!openStdoutOrFile (device, path, QIODevice::ReadWrite) ||
 		    !generator.generate (&device, argJsonInsert)) {
 			return 3;
+		}
+		
+	}
+	
+	// Lua generator
+	LuaGenerator luaGenerator (&definitions);
+	for (const std::string &config : argLuaGenerators) {
+		if (!luaGenerator.generate (config)) {
+			return 4;
 		}
 		
 	}
