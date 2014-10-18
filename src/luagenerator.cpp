@@ -421,8 +421,11 @@ void LuaGenerator::exportAnnotations (lua_State *lua, const Annotations &annotat
 		insertString (lua, "name", cur.name);
 		insertString (lua, "value", cur.value);
 		
-		lua_pushinteger (lua, cur.valueType);
+		pushAnnotationType (lua, cur.type);
 		lua_setfield (lua, -2, "type");
+		
+		lua_pushinteger (lua, cur.valueType);
+		lua_setfield (lua, -2, "valueType");
 		
 		const char *typeName = QMetaType::typeName (cur.valueType);
 		lua_pushlstring (lua, typeName ? typeName : "", typeName ? strlen (typeName) : 0);
