@@ -62,6 +62,7 @@ struct VariableDef {
 	
 	Annotations annotations;
 	
+	bool isReference = false;
 	bool isConst = false;
 	bool isPodType = false;
 	bool isOptional = false;

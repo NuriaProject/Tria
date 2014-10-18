@@ -542,6 +542,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 		var.name = llvmToString (param->getName ());
 		var.type = typeName (param->getType ());
 		var.isOptional = param->hasDefaultArg ();
+		var.isReference = param->getType ().getTypePtr ()->isReferenceType ();
 		var.isConst = param->getType ().isConstant (*this->m_context);
 		var.isPodType = param->getType ().isPODType (*this->m_context);
 		def.hasOptionalArguments = var.isOptional;

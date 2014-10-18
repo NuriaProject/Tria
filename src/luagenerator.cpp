@@ -463,7 +463,7 @@ void LuaGenerator::exportVariables (lua_State *lua, const char *name, const Vari
 	for (int i = 0; i < variables.length (); i++) {
 		const VariableDef &var = variables.at (i);
 		lua_pushstring (lua, var.name.toLatin1 ().constData ());
-		lua_createtable (lua, 0, 10);
+		lua_createtable (lua, 0, 11);
 		
 		// 
 		pushAccessSpecifier (lua, var.access);
@@ -475,6 +475,7 @@ void LuaGenerator::exportVariables (lua_State *lua, const char *name, const Vari
 		insertString (lua, "setter", var.setter);
 		exportAnnotations (lua, var.annotations);
 		insertBool (lua, "isConst", var.isConst);
+		insertBool (lua, "isReference", var.isReference);
 		insertBool (lua, "isPodType", var.isPodType);
 		insertBool (lua, "isOptional", var.isOptional);
 		insertBool (lua, "setterReturnsBool", var.setterReturnsBool);
