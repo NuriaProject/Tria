@@ -614,6 +614,7 @@ VariableDef TriaASTConsumer::processVariable (clang::FieldDecl *decl) {
 	def.type = typeName (decl->getType ());
 	def.name = llvmToString (decl->getName ());
 	def.annotations = annotationsFromDecl (decl);
+	def.isPodType = decl->getType ().isPODType (*this->m_context);
 
 	if (def.access != clang::AS_public) {
 		return def;
