@@ -323,9 +323,12 @@ void LuaGenerator::exportClassDefinitions (lua_State *lua) {
 
 void LuaGenerator::exportClassDefinition (lua_State *lua, const ClassDef &def) {
 	lua_pushstring (lua, def.name.toLatin1 ().constData ());
-	lua_createtable (lua, 0, 12);
+	lua_createtable (lua, 0, 13);
 	
 	// 
+	lua_pushvalue (lua, -2);
+	lua_setfield (lua, -2, "name");
+	
 	exportClassDefinitionBase (lua, def);
 	exportBases (lua, def.bases);
 	exportVariables (lua, "variables", def.variables);
@@ -473,13 +476,16 @@ static void pushMethodType (lua_State *lua, MethodType type) {
 }
 
 void LuaGenerator::exportVariables (lua_State *lua, const char *name, const Variables &variables) {
-	lua_createtable (lua, 0, variables.length ());
+	
+	lua_createtable (lua, variables.length (), 0);
 	for (int i = 0; i < variables.length (); i++) {
 		const VariableDef &var = variables.at (i);
-		lua_pushstring (lua, var.name.toLatin1 ().constData ());
-		lua_createtable (lua, 0, 11);
+		lua_createtable (lua, 0, 12);
 		
 		// 
+		lua_pushstring (lua, var.name.toLatin1 ().constData ());
+		lua_setfield (lua, -2, "name");
+		
 		pushAccessSpecifier (lua, var.access);
 		lua_setfield (lua, -2, "access");
 		
@@ -495,7 +501,7 @@ void LuaGenerator::exportVariables (lua_State *lua, const char *name, const Vari
 		insertBool (lua, "setterReturnsBool", var.setterReturnsBool);
 		
 		// 
-		lua_settable (lua, -3);
+		lua_rawseti (lua, -2, i + 1);
 	}
 	
 	// 
@@ -537,9 +543,12 @@ void LuaGenerator::exportEnums (lua_State *lua, const Enums &enums) {
 	for (int i = 0; i < enums.length (); i++) {
 		const EnumDef &e = enums.at (i);
 		lua_pushstring (lua, e.name.toLatin1 ().constData ());
-		lua_createtable (lua, 0, 2);
+		lua_createtable (lua, 0, 3);
 		
 		// 
+		lua_pushvalue (lua, -2);
+		lua_setfield (lua, -2, "name");
+		
 		exportAnnotations (lua, e.annotations);
 		exportEnumValues (lua, e.elements);
 		
@@ -553,10 +562,16 @@ void LuaGenerator::exportEnums (lua_State *lua, const Enums &enums) {
 
 void LuaGenerator::exportEnumValues (lua_State *lua, const QMap< QString, int > &elements) {
 	lua_createtable (lua, 0, elements.size ());
-	for (auto it = elements.begin (), end = elements.end (); it != end; ++it) {
-		lua_pushstring (lua, it.key ().toUtf8 ().constData ());
-		lua_pushinteger (lua, it.value ());
-		lua_settable (lua, -3);
+	
+	if (elements.size () > 0) { // Reverse iterate to keep sort order
+		auto it = elements.end (), end = elements.begin ();
+		do {
+			--it;
+			lua_pushstring (lua, it.key ().toUtf8 ().constData ());
+			lua_pushinteger (lua, it.value ());
+			lua_settable (lua, -3);
+		} while (it != end);
+		
 	}
 	
 	// 
