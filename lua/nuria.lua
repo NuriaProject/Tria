@@ -17,40 +17,7 @@
 -- Generator for MetaObject classes for use with the NuriaProject Framework.
 
 -------------------------------------------------------------- Utility functions
-function table.length(t)
-	local count = 0
-	
-	for k in pairs(t) do count = count + 1 end
-	return count
-end
-
-function table.containsValue(t, value)
-	for k, v in pairs(t) do
-		if v == value then return true end
-	end
-	return false
-end
-
-function table.keyOfValue(t, value)
-	for k, v in pairs(t) do
-		if v == value then return k end
-	end
-	return nil
-end
-
-function string:split(sep)
-        local fields = {}
-	
-        self:gsub("([^" .. sep .. "]+)", function(c)
-		table.insert (fields, c)
-	end)
-	
-        return fields
-end
-
-function string:escaped()
-	return self:gsub ("\"", "\\\"")
-end
+require "util"
 
 function qByteArray(data)
 	if data == '' then
@@ -58,66 +25,6 @@ function qByteArray(data)
 	else
 		return 'QByteArrayLiteral("' .. data:escaped() .. '")'
 	end
-end
-
-function onEach(table, func)
-	for k,v in pairs(table) do
-		table[k] = func(v, k)
-	end
-	
-	return table
-end
-
-function elementList(t, name)
-	local r = {}
-	for k, v in ipairs (t) do
-		table.insert (r, v[name])
-	end
-	
-	return r
-end
-
-function keys(t)
-	local result = {}
-	for k in pairs(t) do
-		table.insert (result, k)
-	end
-	
-	return result
-end
-
-function spairs(t)
-	local k = keys (t)
-	table.sort (k)
-	local f = function(t, i)
-		i = i + 1
-		local v = t[k[i]]
-		if v ~= nil then
-			return i, v
-		end
-		return nil
-	end
-	return f, t, 0
-end
-
-function values(t)
-	local result = {}
-	for k, v in pairs(t) do
-		table.insert (result, v)
-	end
-	
-	return result
-end
-
-function indentCode(level, code)
-	if level < 1 then
-		return code
-	end
-	
-	local pre = string.rep (" ", level)
-	return table.concat (onEach(code:split ("\n"), function(line)
-		return pre .. line;
-	end), "\n")
 end
 
 function tableToSwitch(t, key, addBreak, offset)
