@@ -52,20 +52,20 @@ LuaGenerator::LuaGenerator (Definitions *definitions)
 	
 }
 
-static bool parseConfig (const std::string &config, QByteArray &luaFile, QByteArray &outFile) {
-	size_t delim = config.find (':');
+bool LuaGenerator::parseConfig (const std::string &string, GenConf &config) {
+	size_t delim = string.find (':');
 	if (delim == std::string::npos) {
-		qCritical() << "Invalid Lua generator config:" << config.c_str ();
+		qCritical() << "Invalid Lua generator config:" << string.c_str ();
 		return false;
 	}
 	
 	// 
-	luaFile = QByteArray (config.c_str (), delim);
-	outFile = QByteArray (config.c_str () + delim + 1);
+	config.luaScript = QString (QLatin1String (string.c_str (), delim));
+	config.outFile = QString (QLatin1String (string.c_str () + delim + 1));
 	
 	// 
-	if (luaFile.isEmpty () || outFile.isEmpty ()) {
-		qCritical() << "Lua generator, no lua or outfile was given:" << config.c_str ();
+	if (config.luaScript.isEmpty () || config.outFile.isEmpty ()) {
+		qCritical() << "Lua generator, no lua or outfile was given:" << string.c_str ();
 		return false;
 	}
 	
@@ -73,35 +73,36 @@ static bool parseConfig (const std::string &config, QByteArray &luaFile, QByteAr
 	return true;
 }
 
-bool LuaGenerator::generate (const std::string &config, const std::string &sourceName) {
-	QByteArray luaFile;
-	QByteArray outFile;
-	
-	// Read config ("luafile,outfile")
-	if (!parseConfig (config, luaFile, outFile)) {
-		return false;
+static bool openFileOrStdout (QFile *file, const QString &name) {
+	if (name == QLatin1String ("-")) {
+		return file->open (stdout, QIODevice::WriteOnly);
 	}
 	
+	file->setFileName (name);
+	return file->open (QIODevice::WriteOnly);
+}
+
+bool LuaGenerator::generate (const QString &sourceFile, const GenConf &config) {
+	
 	// Read lua file
-	QFile scriptFile (luaFile);
+	QFile scriptFile (config.luaScript);
 	if (!scriptFile.open (QIODevice::ReadOnly)) {
-		qCritical() << "Lua generator, failed to open script" << luaFile;
+		qCritical() << "Lua generator, failed to open script" << config.luaScript;
 		return false;
 	}
 	
 	// Open outfile
-	QFile outHandle (outFile);
-	if (!outHandle.open (QIODevice::WriteOnly)) {
-		qCritical() << "Lua generator, failed to open outfile" << outFile;
+	QFile outHandle;
+	if (!openFileOrStdout (&outHandle, config.outFile)) {
+		qCritical() << "Lua generator, failed to open outfile" << config.outFile;
 		return false;
 	}
 	
 	// 
-	QByteArray sourceFile (sourceName.c_str (), sourceName.length ());
-	return runScript (sourceFile, outFile, luaFile, scriptFile.readAll (), &outHandle);
+	return runScript (sourceFile, config.outFile, config.luaScript, scriptFile.readAll (), &outHandle);
 }
 
-bool LuaGenerator::runScript (const QByteArray &soucePath, const QByteArray &outPath, const QByteArray &scriptName,
+bool LuaGenerator::runScript (const QString &soucePath, const QString &outPath, const QString &scriptName,
                               const QByteArray &script, QFile *outFile) {
 	std::unique_ptr< lua_State, decltype(&lua_close) > lua (lua_open (), &lua_close);
 	initState (lua.get (), soucePath, outPath, outFile);
@@ -120,8 +121,7 @@ bool LuaGenerator::runScript (const QByteArray &soucePath, const QByteArray &out
 	return true;
 }
 
-void LuaGenerator::initState (lua_State *lua, const QByteArray &sourceFile,
-                              const QByteArray &outFile, QFile *file) {
+void LuaGenerator::initState (lua_State *lua, const QString &sourceFile, const QString &outFile, QFile *file) {
 	luaL_openlibs (lua);
 	
 	// 
@@ -141,8 +141,8 @@ static inline void insertBool (lua_State *lua, const char *name, bool value) {
 	lua_setfield (lua, -2, name);
 }
 
-void LuaGenerator::addInformation (lua_State *lua, const QByteArray &sourceFile,
-                                   const QByteArray &outFile) {
+void LuaGenerator::addInformation (lua_State *lua, const QString &sourceFile,
+                                   const QString &outFile) {
 	lua_createtable (lua, 0, 6);
 	
 	lua_pushliteral(lua, __TIME__);
@@ -154,10 +154,10 @@ void LuaGenerator::addInformation (lua_State *lua, const QByteArray &sourceFile,
 	lua_pushliteral(lua, QT_STRINGIFY(LLVM_VERSION_MAJOR) "." QT_STRINGIFY(LLVM_VERSION_MINOR));
 	lua_setfield (lua, -2, "llvmVersion");
 	
-	lua_pushstring (lua, sourceFile.constData ());
+	lua_pushstring (lua, sourceFile.toUtf8 ().constData ());
 	lua_setfield (lua, -2, "sourceFile");
 	
-	lua_pushstring (lua, outFile.constData ());
+	lua_pushstring (lua, outFile.toUtf8 ().constData ());
 	lua_setfield (lua, -2, "outFile");
 	
 	insertString (lua, "currentDateTime", QDateTime::currentDateTime ().toString (Qt::ISODate));
@@ -209,7 +209,7 @@ static int luaLog (lua_State *lua) {
 	int level = lua_tointeger (lua, lua_upvalueindex(1));
 	int argc = lua_gettop (lua);
 	
-	printf ("%s: ", logLevelName (level));
+	fprintf (stderr, "%s: ", logLevelName (level));
 	for (int i = 1; i <= argc; i++) {
 		printStackElement (lua, i);
 	}

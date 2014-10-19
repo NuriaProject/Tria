@@ -44,7 +44,6 @@
 #include <clang/Driver/Job.h>
 
 #include "triaastconsumer.hpp"
-#include "nuriagenerator.hpp"
 #include "jsongenerator.hpp"
 #include "luagenerator.hpp"
 #include "definitions.hpp"
@@ -243,20 +242,14 @@ int main (int argc, const char **argv) {
 	}
 	
 	// Generate code
+	QVector< GenConf > generators;
 	bool jsonOutput = (argJsonOutputFile.getPosition () > 0);
 	bool cxxOutput = (argCxxOutputFile.getPosition () > 0);
 	
 	// C++ code generator
 	if (!jsonOutput || (cxxOutput && jsonOutput)) {
 		QString path = QString::fromStdString (argCxxOutputFile);
-		NuriaGenerator generator (&definitions);
-		QFile device;
-		
-		if (!openStdoutOrFile (device, path, QIODevice::WriteOnly) ||
-		    !generator.generate (&device)) {
-			return 2;
-		}
-		
+		generators.append ({ QStringLiteral(":/lua/nuria.lua"), path, QString () });
 	}
 	
 	// JSON generator
@@ -272,11 +265,23 @@ int main (int argc, const char **argv) {
 		
 	}
 	
-	// Lua generator
-	LuaGenerator luaGenerator (&definitions);
+	// Custom Lua generators
 	for (const std::string &config : argLuaGenerators) {
-		if (!luaGenerator.generate (config, argInputFile)) {
+		GenConf genConf;
+		if (!LuaGenerator::parseConfig (config, genConf)) {
 			return 4;
+		} else {
+			generators.append (genConf);
+		}
+		
+	}
+	
+	// Run generators
+	LuaGenerator luaGenerator (&definitions);
+	QString sourceFile = QString::fromStdString (argInputFile);
+	for (int i = 0; i < generators.length (); i++) {
+		if (!luaGenerator.generate (sourceFile, generators.at (i))) {
+			return 5;
 		}
 		
 	}

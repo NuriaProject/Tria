@@ -23,19 +23,26 @@
 struct lua_State;
 class QFile;
 
+struct GenConf {
+	QString luaScript;
+	QString outFile;
+	QString args;
+};
+
 class LuaGenerator {
 public:
 	LuaGenerator (Definitions *definitions);
 	
-	bool generate (const std::string &config, const std::string &sourceName);
+	static bool parseConfig (const std::string &string, GenConf &config);
+	bool generate (const QString &sourceFile, const GenConf &config);
 	
 private:
 	
-	bool runScript (const QByteArray &soucePath, const QByteArray &outPath, const QByteArray &scriptName,
+	bool runScript (const QString &soucePath, const QString &outPath, const QString &scriptName,
 	                const QByteArray &script, QFile *outFile);
 	
-	void initState (lua_State *lua, const QByteArray &sourceFile, const QByteArray &outFile, QFile *file);
-	void addInformation (lua_State *lua, const QByteArray &sourceFile, const QByteArray &outFile);
+	void initState (lua_State *lua, const QString &sourceFile, const QString &outFile, QFile *file);
+	void addInformation (lua_State *lua, const QString &sourceFile, const QString &outFile);
 	void addLog (lua_State *lua);
 	void addWrite (lua_State *lua, QFile *file);
 	
