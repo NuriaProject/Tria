@@ -95,6 +95,15 @@ function values(t)
 	return result
 end
 
+-- Finds all values in 't' where 'key' is 'value'
+function findAll(t, key, value)
+	local r = {}
+	for k, v in pairs (t) do
+		if v[key] == value then table.insert (r, k, v) end
+	end
+	return r
+end
+
 -- Iterates over 't' by sorting by key.
 function spairs(t)
 	local k = keys (t)
