@@ -17,6 +17,7 @@
 
 #include "luagenerator.hpp"
 
+#include <QJsonDocument>
 #include <QDateTime>
 #include <memory>
 #include <QDebug>
@@ -134,6 +135,7 @@ void LuaGenerator::initState (lua_State *lua, const QString &sourceFile, const G
 	// 
 	addLog (lua);
 	addWrite (lua, file);
+	addJson (lua);
 	addInformation (lua, sourceFile, config);
 	
 }
@@ -242,6 +244,18 @@ void LuaGenerator::addLog (lua_State *lua) {
 	
 	// 
 	lua_setfield (lua, LUA_GLOBALSINDEX, "log");
+}
+
+void LuaGenerator::addJson (lua_State *lua) {
+	lua_createtable (lua, 0, 1);
+	
+//	lua_pushcclosure (lua, &LuaGenerator::jsonParse, 0);
+//	lua_setfield (lua, -2, "parse");
+	
+	lua_pushcclosure (lua, &LuaGenerator::jsonSerialize, 0);
+	lua_setfield (lua, -2, "serialize");
+	
+	lua_setfield (lua, LUA_GLOBALSINDEX, "json");
 }
 
 static int luaWrite (lua_State *lua) {
@@ -602,4 +616,76 @@ void LuaGenerator::exportConversions (lua_State *lua, const Conversions &convers
 	
 	// 
 	lua_setfield (lua, -2, "conversions");
+}
+
+static QVariant luaToVariant (lua_State *lua);
+static QVariantList luaArrayToVariant (lua_State *lua) {
+	int arrLen = lua_objlen (lua, -1);
+	QVariantList list;
+	list.reserve (arrLen);
+	
+	for (int i = 1; i <= arrLen; i++) {
+		lua_rawgeti (lua, -1, i); // Push element on stack
+		list.append (luaToVariant (lua)); // Inspect
+		lua_pop (lua, 1); // Pop element from stack
+	}
+	
+	return list;
+}
+
+static QVariantMap luaMapToVariant (lua_State *lua) {
+	QVariantMap map;
+	
+	lua_pushnil (lua); // Push key
+	while (lua_next (lua, -2) != 0) {
+		if (lua_isstring (lua, -2)) {
+			size_t len = 0;
+			const char *rawKey = lua_tolstring (lua, -2, &len);
+			QString key = QString::fromUtf8 (rawKey, len);
+			map.insert (key, luaToVariant (lua));
+		}
+		
+		lua_pop(lua, 1); // Pop value
+	}
+	
+	// Key is removed by lua_next()
+	return map;
+}
+
+static QVariant luaTableToVariant (lua_State *lua) {
+	int arrLen = lua_objlen (lua, -1);
+	if (arrLen > 0) {
+		return luaArrayToVariant (lua);
+	}
+	
+	return luaMapToVariant (lua);
+}
+
+static QVariant luaToVariant (lua_State *lua) {
+	switch (lua_type (lua, -1)) {
+	case LUA_TSTRING:
+		return QString::fromUtf8 (lua_tostring(lua, -1));
+	case LUA_TBOOLEAN:
+		return bool (lua_toboolean (lua, -1));
+	case LUA_TNUMBER:
+		return lua_tonumber (lua, -1);
+	case LUA_TTABLE:
+		return luaTableToVariant (lua);
+	}
+	
+	return QVariant ();
+}
+
+int LuaGenerator::jsonSerialize (lua_State *lua) {
+	if (lua_gettop (lua) != 1 || !lua_istable(lua, 1)) {
+		return luaL_error (lua, "json.serialize expects a table as only argument.");
+	}
+	
+	// Generate JSON
+	QVariant variant = luaToVariant (lua);
+	QByteArray data = QJsonDocument::fromVariant (variant).toJson (QJsonDocument::Indented);
+	
+	// Return
+	lua_pushstring (lua, data.constData ());
+	return 1;
 }

@@ -44,6 +44,7 @@ private:
 	void initState (lua_State *lua, const QString &sourceFile, const GenConf &config, QFile *file);
 	void addInformation (lua_State *lua, const QString &sourceFile, const GenConf &config);
 	void addLog (lua_State *lua);
+	void addJson (lua_State *lua);
 	void addWrite (lua_State *lua, QFile *file);
 	
 	void exportDefinitions (lua_State *lua);
@@ -59,6 +60,8 @@ private:
 	void exportEnums (lua_State *lua, const Enums &enums);
 	void exportEnumValues (lua_State *lua, const QMap< QString, int > &elements);
 	void exportConversions (lua_State *lua, const Conversions &conversions);
+	
+	static int jsonSerialize (lua_State *lua);
 	
 	Definitions *m_definitions;
 	
