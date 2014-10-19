@@ -68,7 +68,7 @@ cl::list< std::string > argInspectBases ("introspect-inheriting", cl::CommaSepar
 					 cl::desc ("Introspect all types which inherit <type>."),
 					 cl::value_desc ("type1,typeN,..."));
 cl::list< std::string > argLuaGenerators ("lua-generator", cl::desc ("Lua generator script"),
-                                          cl::value_desc ("script:outfile"));
+                                          cl::value_desc ("script:outfile[:arguments]"));
 cl::list< std::string > argIncludeDirs ("I", cl::Prefix, cl::desc ("Additional search path"), cl::value_desc ("path"));
 cl::list< std::string > argDefines ("D", cl::Prefix, cl::desc ("#define"), cl::value_desc ("name[=value]"));
 cl::list< std::string > argUndefines ("U", cl::Prefix, cl::desc ("#undef"), cl::value_desc ("name"));
@@ -187,29 +187,14 @@ static void prefixedAppend (std::vector< std::string > &arguments, llvm::cl::lis
 	
 }
 
-static void passThroughClangOptions (std::vector< std::string > &arguments) {
-	prefixedAppend (arguments, argDefines, "-D");
-	prefixedAppend (arguments, argUndefines, "-U");
-	prefixedAppend (arguments, argIncludeDirs, "-I");
-	prefixedAppend (arguments, argSearchPaths, "-I");
-	
-}
-
-int main (int argc, const char **argv) {
-	std::vector< std::string > arguments;
-	
-	// Prepare Clang arguments
-	arguments.push_back (argv[0]);
+static void initClangArguments (const char *progName, std::vector< std::string > &arguments) {
+	arguments.push_back (progName);
 	arguments.push_back ("-x");
 	arguments.push_back ("c++");
 	arguments.push_back ("-fPIE");
 	arguments.push_back ("-DTRIA_RUN");
 	arguments.push_back ("-std=c++11");
 	arguments.push_back ("-fsyntax-only");
-	
-	// Parse arguments
-	const char *helpTitle = "Tria by the NuriaProject, built on " __DATE__ " " __TIME__;
-	llvm::cl::ParseCommandLineOptions (argc, argv, helpTitle);
 	
 	// Inject absolute path to the clang headers on linux.
 	// Should we bundle those too? Would add another 1.5MiB ..
@@ -222,14 +207,28 @@ int main (int argc, const char **argv) {
 #endif
 	
 	// Append user-supplied arguments
-	passThroughClangOptions (arguments);
+	prefixedAppend (arguments, argDefines, "-D");
+	prefixedAppend (arguments, argUndefines, "-U");
+	prefixedAppend (arguments, argIncludeDirs, "-I");
+	prefixedAppend (arguments, argSearchPaths, "-I");
 	arguments.push_back (argInputFile);
+	
+}
+
+int main (int argc, const char **argv) {
+	std::vector< std::string > arguments;
+	
+	// Parse arguments
+	const char *helpTitle = "Tria by the NuriaProject, built on " __DATE__ " " __TIME__;
+	llvm::cl::ParseCommandLineOptions (argc, argv, helpTitle);
+	initClangArguments (argv[0], arguments);
 	
 	// 
 	clang::FileManager *fm = new clang::FileManager ({ "." });
 	
 	// Create tool instance
-	Definitions definitions (QString::fromStdString (argInputFile));
+	QString sourceFile = QString::fromStdString (argInputFile);
+	Definitions definitions (sourceFile);
 	TriaAction *triaAction = new TriaAction (&definitions);
 	clang::tooling::ToolInvocation tool (arguments, triaAction, fm);
 	
@@ -247,7 +246,7 @@ int main (int argc, const char **argv) {
 	bool cxxOutput = (argCxxOutputFile.getPosition () > 0);
 	
 	// C++ code generator
-	if (!jsonOutput || (cxxOutput && jsonOutput)) {
+	if (cxxOutput) {
 		QString path = QString::fromStdString (argCxxOutputFile);
 		generators.append ({ QStringLiteral(":/lua/nuria.lua"), path, QString () });
 	}
@@ -278,7 +277,6 @@ int main (int argc, const char **argv) {
 	
 	// Run generators
 	LuaGenerator luaGenerator (&definitions);
-	QString sourceFile = QString::fromStdString (argInputFile);
 	for (int i = 0; i < generators.length (); i++) {
 		if (!luaGenerator.generate (sourceFile, generators.at (i))) {
 			return 5;
