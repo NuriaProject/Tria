@@ -44,7 +44,6 @@
 #include <clang/Driver/Job.h>
 
 #include "triaastconsumer.hpp"
-#include "jsongenerator.hpp"
 #include "luagenerator.hpp"
 #include "definitions.hpp"
 
@@ -59,8 +58,6 @@ cl::opt< std::string > argCxxOutputFile ("cxx-output", cl::ValueOptional, cl::in
 					 cl::desc ("C++ output file"), cl::value_desc ("cpp file"));
 cl::opt< std::string > argJsonOutputFile ("json-output", cl::ValueOptional, cl::init ("-"),
 					  cl::desc ("JSON output file"), cl::value_desc ("json file"));
-cl::opt< bool > argJsonInsert ("insert-json", cl::ValueDisallowed,
-			       cl::desc ("Insert JSON output data into the json output file rather than replacing it"));
 cl::opt< bool > argInspectAll ("introspect-all", cl::ValueDisallowed,
 			       cl::desc ("All types will be introspected as if they had a NURIA_INTROSPECT annotation. "
 					 "Types with NURIA_SKIP will be ignored."));
@@ -76,7 +73,6 @@ cl::list< std::string > argUndefines ("U", cl::Prefix, cl::desc ("#undef"), cl::
 // Aliases
 cl::alias aliasCxxOutputFile ("o", cl::Prefix, cl::desc ("Alias for -cxx-output"), cl::aliasopt (argCxxOutputFile));
 cl::alias aliasJsonOutputFile ("j", cl::Prefix, cl::desc ("Alias for -json-output"), cl::aliasopt (argJsonOutputFile));
-cl::alias aliasJsonInsert ("a", cl::desc ("Alias for -insert-json"), cl::aliasopt (argJsonInsert));
 cl::alias aliasInspectBases ("B", cl::Prefix, cl::desc ("Alias for -introspect-inheriting"),
 			     cl::aliasopt (argInspectBases));
 
@@ -254,14 +250,7 @@ int main (int argc, const char **argv) {
 	// JSON generator
 	if (jsonOutput) {
 		QString path = QString::fromStdString (argJsonOutputFile);
-		JsonGenerator generator (&definitions);
-		QFile device;
-		
-		if (!openStdoutOrFile (device, path, QIODevice::ReadWrite) ||
-		    !generator.generate (&device, argJsonInsert)) {
-			return 3;
-		}
-		
+		generators.append ({ QStringLiteral(":/lua/json.lua"), path, QString () });
 	}
 	
 	// Custom Lua generators

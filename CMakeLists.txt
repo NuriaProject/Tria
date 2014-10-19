@@ -60,8 +60,6 @@ SET(Tria_SRC
     src/defs.cpp
     src/defs.hpp
     src/main.cpp
-    src/jsongenerator.cpp
-    src/jsongenerator.hpp
     src/luagenerator.cpp
     src/luagenerator.hpp
     src/triaastconsumer.cpp
