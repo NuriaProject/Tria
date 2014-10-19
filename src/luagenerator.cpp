@@ -274,6 +274,7 @@ void LuaGenerator::exportDefinitions (lua_State *lua) {
 	exportStringSet (lua, "declaredTypes", this->m_definitions->declaredTypes ());
 	exportStringSet (lua, "declareTypes", this->m_definitions->declareTypes ());
 	exportStringSet (lua, "avoidedTypes", this->m_definitions->avoidedTypes ());
+	exportStringMap (lua, "typedefs", this->m_definitions->typedefs ());
 	exportClassDefinitions (lua);
 	
 	// 
@@ -288,6 +289,19 @@ void LuaGenerator::exportStringSet (lua_State *lua, const char *name, const Stri
 	for (auto it = set.constBegin (), end = set.constEnd (); it != end; ++it, i++) {
 		lua_pushstring (lua, it->toLatin1 ().constData ());
 		lua_rawseti (lua, -2, i);
+	}
+	
+	// 
+	lua_setfield (lua, -2, name);
+}
+
+void LuaGenerator::exportStringMap (lua_State *lua, const char *name, const StringMap &map) {
+	lua_createtable (lua, 0, map.size ());
+	
+	for (auto it = map.constBegin (), end = map.constEnd (); it != end; ++it) {
+		lua_pushstring (lua, it.key ().toLatin1 ().constData ());
+		lua_pushstring (lua, it.value ().toLatin1 ().constData ());
+		lua_settable (lua, -3);
 	}
 	
 	// 

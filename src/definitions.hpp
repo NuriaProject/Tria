@@ -27,6 +27,7 @@
 
 class QIODevice;
 typedef QSet< QString > StringSet;
+typedef QMap< QString, QString > StringMap;
 
 class Definitions {
 public:
@@ -82,6 +83,9 @@ public:
 	 */
 	StringSet avoidedTypes () const;
 	
+	/** Returns all typedefs. */
+	StringMap typedefs () const;
+	
 	/** Returns \c true if \a type should be avoided. */
 	bool isTypeAvoided (const QString &type);
 	
@@ -97,7 +101,7 @@ private:
 	StringSet m_declaredTypes;
 	StringSet m_declareTypes;
 	StringSet m_avoidedTypes;
-	QMap< QString, QString > m_typeDefs;
+	StringMap m_typeDefs;
 	QVector< ClassDef > m_classes;
 	
 };

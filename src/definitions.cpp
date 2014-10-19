@@ -92,6 +92,10 @@ StringSet Definitions::avoidedTypes () const {
 	return this->m_avoidedTypes;
 }
 
+StringMap Definitions::typedefs () const {
+	return this->m_typeDefs;
+}
+
 bool Definitions::isTypeAvoided (const QString &type) {
 	return this->m_avoidedTypes.contains (type);
 }

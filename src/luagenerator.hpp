@@ -41,6 +41,7 @@ private:
 	
 	void exportDefinitions (lua_State *lua);
 	void exportStringSet (lua_State *lua, const char *name, const StringSet &set);
+	void exportStringMap (lua_State *lua, const char *name, const StringMap &map);
 	void exportClassDefinitions (lua_State *lua);
 	void exportClassDefinition (lua_State *lua, const ClassDef &def);
 	void exportClassDefinitionBase (lua_State *lua, const ClassDef &def);
