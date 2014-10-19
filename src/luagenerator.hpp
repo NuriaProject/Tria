@@ -38,11 +38,11 @@ public:
 	
 private:
 	
-	bool runScript (const QString &soucePath, const QString &outPath, const QString &scriptName,
+	bool runScript (const QString &soucePath, const GenConf &config,
 	                const QByteArray &script, QFile *outFile);
 	
-	void initState (lua_State *lua, const QString &sourceFile, const QString &outFile, QFile *file);
-	void addInformation (lua_State *lua, const QString &sourceFile, const QString &outFile);
+	void initState (lua_State *lua, const QString &sourceFile, const GenConf &config, QFile *file);
+	void addInformation (lua_State *lua, const QString &sourceFile, const GenConf &config);
 	void addLog (lua_State *lua);
 	void addWrite (lua_State *lua, QFile *file);
 	

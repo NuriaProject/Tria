@@ -59,11 +59,18 @@ bool LuaGenerator::parseConfig (const std::string &string, GenConf &config) {
 		return false;
 	}
 	
-	// 
+	// Store
 	config.luaScript = QString (QLatin1String (string.c_str (), delim));
 	config.outFile = QString (QLatin1String (string.c_str () + delim + 1));
 	
-	// 
+	// Look for optional 'arguments' field
+	int argsPos = config.outFile.indexOf (QChar (':'));
+	if (argsPos > -1) {
+		config.args = config.outFile.mid (argsPos + 1);
+		config.outFile.chop (config.outFile.length () - argsPos);
+	}
+	
+	// Sanity check
 	if (config.luaScript.isEmpty () || config.outFile.isEmpty ()) {
 		qCritical() << "Lua generator, no lua or outfile was given:" << string.c_str ();
 		return false;
@@ -99,19 +106,19 @@ bool LuaGenerator::generate (const QString &sourceFile, const GenConf &config) {
 	}
 	
 	// 
-	return runScript (sourceFile, config.outFile, config.luaScript, scriptFile.readAll (), &outHandle);
+	return runScript (sourceFile, config, scriptFile.readAll (), &outHandle);
 }
 
-bool LuaGenerator::runScript (const QString &soucePath, const QString &outPath, const QString &scriptName,
+bool LuaGenerator::runScript (const QString &soucePath, const GenConf &config,
                               const QByteArray &script, QFile *outFile) {
 	std::unique_ptr< lua_State, decltype(&lua_close) > lua (lua_open (), &lua_close);
-	initState (lua.get (), soucePath, outPath, outFile);
+	initState (lua.get (), soucePath, config, outFile);
 	exportDefinitions (lua.get ());
 	
 	// Execute script
 	int r = luaL_loadstring (lua.get (), script.constData ());
 	if (r != 0 || lua_pcall (lua.get (), 0, 0, 0) > 0) {
-		qCritical() << "Lua generator, failed to run" << scriptName
+		qCritical() << "Lua generator, failed to run" << config.luaScript
 		            << "error:" << lua_tostring(lua.get (), 1);
 		outFile->remove ();
 		return false;
@@ -121,13 +128,13 @@ bool LuaGenerator::runScript (const QString &soucePath, const QString &outPath, 
 	return true;
 }
 
-void LuaGenerator::initState (lua_State *lua, const QString &sourceFile, const QString &outFile, QFile *file) {
+void LuaGenerator::initState (lua_State *lua, const QString &sourceFile, const GenConf &config, QFile *file) {
 	luaL_openlibs (lua);
 	
 	// 
 	addLog (lua);
 	addWrite (lua, file);
-	addInformation (lua, sourceFile, outFile);
+	addInformation (lua, sourceFile, config);
 	
 }
 
@@ -141,8 +148,7 @@ static inline void insertBool (lua_State *lua, const char *name, bool value) {
 	lua_setfield (lua, -2, name);
 }
 
-void LuaGenerator::addInformation (lua_State *lua, const QString &sourceFile,
-                                   const QString &outFile) {
+void LuaGenerator::addInformation (lua_State *lua, const QString &sourceFile, const GenConf &config) {
 	lua_createtable (lua, 0, 6);
 	
 	lua_pushliteral(lua, __TIME__);
@@ -154,12 +160,9 @@ void LuaGenerator::addInformation (lua_State *lua, const QString &sourceFile,
 	lua_pushliteral(lua, QT_STRINGIFY(LLVM_VERSION_MAJOR) "." QT_STRINGIFY(LLVM_VERSION_MINOR));
 	lua_setfield (lua, -2, "llvmVersion");
 	
-	lua_pushstring (lua, sourceFile.toUtf8 ().constData ());
-	lua_setfield (lua, -2, "sourceFile");
-	
-	lua_pushstring (lua, outFile.toUtf8 ().constData ());
-	lua_setfield (lua, -2, "outFile");
-	
+	insertString (lua, "arguments", config.args);
+	insertString (lua, "sourceFile", sourceFile);
+	insertString (lua, "outFile", config.outFile);
 	insertString (lua, "currentDateTime", QDateTime::currentDateTime ().toString (Qt::ISODate));
 	
 	lua_setfield (lua, LUA_GLOBALSINDEX, "tria");
