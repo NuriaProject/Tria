@@ -46,6 +46,7 @@ private:
 	void addLog (lua_State *lua);
 	void addJson (lua_State *lua);
 	void addWrite (lua_State *lua, QFile *file);
+	void addLibLoader (lua_State *lua);
 	
 	void exportDefinitions (lua_State *lua);
 	void exportStringSet (lua_State *lua, const char *name, const StringSet &set);
@@ -60,6 +61,8 @@ private:
 	void exportEnums (lua_State *lua, const Enums &enums);
 	void exportEnumValues (lua_State *lua, const QMap< QString, int > &elements);
 	void exportConversions (lua_State *lua, const Conversions &conversions);
+	
+	static int requireLoader (lua_State *lua);
 	
 	static int jsonSerialize (lua_State *lua);
 	

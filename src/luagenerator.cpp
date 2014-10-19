@@ -73,7 +73,7 @@ bool LuaGenerator::parseConfig (const std::string &string, GenConf &config) {
 	
 	// Sanity check
 	if (config.luaScript.isEmpty () || config.outFile.isEmpty ()) {
-		qCritical() << "Lua generator, no lua or outfile was given:" << string.c_str ();
+		qCritical() << "Lua: no lua or outfile was given:" << string.c_str ();
 		return false;
 	}
 	
@@ -95,14 +95,14 @@ bool LuaGenerator::generate (const QString &sourceFile, const GenConf &config) {
 	// Read lua file
 	QFile scriptFile (config.luaScript);
 	if (!scriptFile.open (QIODevice::ReadOnly)) {
-		qCritical() << "Lua generator, failed to open script" << config.luaScript;
+		qCritical() << "Lua: failed to open script" << config.luaScript;
 		return false;
 	}
 	
 	// Open outfile
 	QFile outHandle;
 	if (!openFileOrStdout (&outHandle, config.outFile)) {
-		qCritical() << "Lua generator, failed to open outfile" << config.outFile;
+		qCritical() << "Lua: failed to open outfile" << config.outFile;
 		return false;
 	}
 	
@@ -110,17 +110,29 @@ bool LuaGenerator::generate (const QString &sourceFile, const GenConf &config) {
 	return runScript (sourceFile, config, scriptFile.readAll (), &outHandle);
 }
 
-bool LuaGenerator::runScript (const QString &soucePath, const GenConf &config,
+static inline bool loadFromByteArray (lua_State *lua, const QByteArray &code, const QString &displayName) {
+	return (luaL_loadbuffer (lua, code.constData (), code.length (), qPrintable(displayName)) == 0);
+}
+
+static void reportExecuteError (lua_State *lua, const QString &displayName) {
+	qCritical() << "Failed to execute script" << displayName
+	            << "error:" << lua_tostring(lua, 1);
+}
+
+static inline bool executeByteArray (lua_State *lua, const QByteArray &code, const QString &displayName) {
+	bool r = loadFromByteArray (lua, code, displayName);
+	return (r && lua_pcall (lua, 0, 0, 0) == 0);
+}
+
+bool LuaGenerator::runScript (const QString &sourcePath, const GenConf &config,
                               const QByteArray &script, QFile *outFile) {
 	std::unique_ptr< lua_State, decltype(&lua_close) > lua (lua_open (), &lua_close);
-	initState (lua.get (), soucePath, config, outFile);
+	initState (lua.get (), sourcePath, config, outFile);
 	exportDefinitions (lua.get ());
 	
 	// Execute script
-	int r = luaL_loadstring (lua.get (), script.constData ());
-	if (r != 0 || lua_pcall (lua.get (), 0, 0, 0) > 0) {
-		qCritical() << "Lua generator, failed to run" << config.luaScript
-		            << "error:" << lua_tostring(lua.get (), 1);
+	if (!executeByteArray (lua.get (), script, config.luaScript)) {
+		reportExecuteError (lua.get (), config.luaScript);
 		outFile->remove ();
 		return false;
 	}
@@ -136,6 +148,7 @@ void LuaGenerator::initState (lua_State *lua, const QString &sourceFile, const G
 	addLog (lua);
 	addWrite (lua, file);
 	addJson (lua);
+	addLibLoader (lua);
 	addInformation (lua, sourceFile, config);
 	
 }
@@ -275,11 +288,22 @@ static int luaWrite (lua_State *lua) {
 }
 
 void LuaGenerator::addWrite (lua_State *lua, QFile *file) {
-	
 	lua_pushlightuserdata (lua, file);
 	lua_pushcclosure (lua, luaWrite, 1);
 	lua_setfield (lua, LUA_GLOBALSINDEX, "write");
 	
+}
+
+void LuaGenerator::addLibLoader (lua_State *lua) {
+	lua_getglobal(lua, "package");
+	lua_getfield (lua, -1, "loaders");
+	
+	// Append loader to the end
+	lua_pushcclosure (lua, &LuaGenerator::requireLoader, 0);
+	lua_rawseti (lua, -2, lua_objlen (lua, -2) + 1);
+	
+	// 
+	lua_pop(lua, 2);
 }
 
 void LuaGenerator::exportDefinitions (lua_State *lua) {
@@ -616,6 +640,42 @@ void LuaGenerator::exportConversions (lua_State *lua, const Conversions &convers
 	
 	// 
 	lua_setfield (lua, -2, "conversions");
+}
+
+static int loadModule (lua_State *lua, const QString &path, const QString &name) {
+	QFile file (path);
+	if (!file.open (QIODevice::ReadOnly)) {
+		return 0;
+	}
+	
+	// 
+	QByteArray code = file.readAll ();
+	if (!loadFromByteArray (lua, code, name)) {
+		reportExecuteError (lua, name);
+		return 0;
+	}
+	
+	return 1;
+}
+
+int LuaGenerator::requireLoader (lua_State *lua) {
+	static const QString prefix = QStringLiteral(":/lua/");
+	static const QString suffix = QStringLiteral(".lua");
+	
+	// Get module name
+	size_t len = 0;
+	const char *rawName = lua_tolstring (lua, 1, &len);
+	QString name = QString::fromUtf8 (rawName, len);
+	
+	// Do we know this?
+	QString fullName = prefix + name + suffix;
+	if (!QFile::exists (fullName)) {
+		lua_pushfstring (lua, "Unknown Tria module '%s'", rawName);
+		return 1;
+	}
+	
+	// 
+	return loadModule (lua, fullName, name);
 }
 
 static QVariant luaToVariant (lua_State *lua);
