@@ -133,7 +133,7 @@ bool LuaGenerator::loadScript (const QString &path, QByteArray &code) {
 	
 	// 
 	code = scriptFile.readAll ();
-	
+	return true;
 }
 
 static inline bool loadFromByteArray (lua_State *lua, const QByteArray &code, const QString &displayName) {
