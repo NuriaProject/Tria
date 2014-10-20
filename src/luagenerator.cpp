@@ -82,7 +82,7 @@ bool LuaGenerator::parseConfig (const std::string &string, GenConf &config) {
 	return true;
 }
 
-static bool openFileOrStdout (QFile *file, QString &name) {
+static bool openFileOrStdout (QFile *file, QString name) {
 	QIODevice::OpenMode openMode = QIODevice::WriteOnly;
 	
 	// Write to stdout or append
@@ -101,9 +101,8 @@ static bool openFileOrStdout (QFile *file, QString &name) {
 bool LuaGenerator::generate (const QString &sourceFile, const GenConf &config) {
 	
 	// Read lua file
-	QFile scriptFile (config.luaScript);
-	if (!scriptFile.open (QIODevice::ReadOnly)) {
-		qCritical() << "Lua: failed to open script" << config.luaScript;
+	QByteArray scriptData;
+	if (!loadScript (config.luaScript, scriptData)) {
 		return false;
 	}
 	
@@ -115,7 +114,26 @@ bool LuaGenerator::generate (const QString &sourceFile, const GenConf &config) {
 	}
 	
 	// 
-	return runScript (sourceFile, config, scriptFile.readAll (), &outHandle);
+	return runScript (sourceFile, config, scriptData, &outHandle);
+}
+
+bool LuaGenerator::loadScript (const QString &path, QByteArray &code) {
+	
+	// Shell?
+	if (path == QLatin1String ("SHELL")) {
+		return true;
+	}
+	
+	// Usual script file
+	QFile scriptFile (path);
+	if (!scriptFile.open (QIODevice::ReadOnly)) {
+		qCritical() << "Lua: failed to open script" << path;
+		return false;
+	}
+	
+	// 
+	code = scriptFile.readAll ();
+	
 }
 
 static inline bool loadFromByteArray (lua_State *lua, const QByteArray &code, const QString &displayName) {
@@ -139,7 +157,9 @@ bool LuaGenerator::runScript (const QString &sourcePath, const GenConf &config,
 	exportDefinitions (lua.get ());
 	
 	// Execute script
-	if (!executeByteArray (lua.get (), script, config.luaScript)) {
+	if (config.luaScript == QLatin1String ("SHELL")) {
+		startShell (lua.get ());
+	} else if (!executeByteArray (lua.get (), script, config.luaScript)) {
 		reportExecuteError (lua.get (), config.luaScript);
 		outFile->remove ();
 		return false;
@@ -147,6 +167,11 @@ bool LuaGenerator::runScript (const QString &sourcePath, const GenConf &config,
 	
 	// 
 	return true;
+}
+
+void LuaGenerator::startShell (lua_State *lua) {
+	LuaShell shell (lua);
+	shell.run ();
 }
 
 void LuaGenerator::initState (lua_State *lua, const QString &sourceFile, const GenConf &config, QFile *file) {

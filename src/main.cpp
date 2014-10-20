@@ -66,6 +66,8 @@ cl::list< std::string > argInspectBases ("introspect-inheriting", cl::CommaSepar
 					 cl::value_desc ("type1,typeN,..."));
 cl::list< std::string > argLuaGenerators ("lua-generator", cl::desc ("Lua generator script"),
                                           cl::value_desc ("script:outfile[:arguments]"));
+cl::opt< bool > argLuaShell ("shell", cl::ValueDisallowed,
+                             cl::desc ("Opens a Lua shell on stdin/out in the Lua generator environment"));
 cl::list< std::string > argIncludeDirs ("I", cl::Prefix, cl::desc ("Additional search path"), cl::value_desc ("path"));
 cl::list< std::string > argDefines ("D", cl::Prefix, cl::desc ("#define"), cl::value_desc ("name[=value]"));
 cl::list< std::string > argUndefines ("U", cl::Prefix, cl::desc ("#undef"), cl::value_desc ("name"));
@@ -122,24 +124,6 @@ clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, 
 	
 	// 
 	return new TriaASTConsumer (ci, fileName, whichInherit, argInspectAll, this->m_definitions);
-}
-
-static bool openStdoutOrFile (QFile &device, const QString &path, QIODevice::OpenMode openMode) {
-	if (path.isEmpty () || path == "-") {
-		device.open (stdout, openMode);
-	} else {
-		device.setFileName (path);
-		if (!device.open (openMode)) {
-			qCritical("Failed to open file %s: %s",
-				  qPrintable(path),
-				  qPrintable(device.errorString ()));
-			return false;
-		}
-		
-	}
-	
-	return true;
-	
 }
 
 static QVector< QByteArray > mapVirtualFiles (clang::tooling::ToolInvocation &tool,
@@ -253,14 +237,19 @@ int main (int argc, const char **argv) {
 		generators.append ({ QStringLiteral(":/lua/json.lua"), path, QString () });
 	}
 	
+	// Lua shell
+	if (argLuaShell) {
+		generators.append ({ QStringLiteral("SHELL"), QStringLiteral("-") , QString () });
+	}
+	
 	// Custom Lua generators
 	for (const std::string &config : argLuaGenerators) {
 		GenConf genConf;
 		if (!LuaGenerator::parseConfig (config, genConf)) {
 			return 4;
-		} else {
-			generators.append (genConf);
 		}
+		
+		generators.append (genConf);
 		
 	}
 	

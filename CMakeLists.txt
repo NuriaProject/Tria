@@ -62,6 +62,8 @@ SET(Tria_SRC
     src/main.cpp
     src/luagenerator.cpp
     src/luagenerator.hpp
+    src/luashell.cpp
+    src/luashell.hpp
     src/triaastconsumer.cpp
     src/triaastconsumer.hpp
 )
