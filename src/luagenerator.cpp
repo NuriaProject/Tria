@@ -25,6 +25,7 @@
 
 #include <clang/Tooling/Tooling.h>
 #include "definitions.hpp"
+#include "luashell.hpp"
 #include <lua.hpp>
 #include <cstdio>
 
@@ -81,13 +82,20 @@ bool LuaGenerator::parseConfig (const std::string &string, GenConf &config) {
 	return true;
 }
 
-static bool openFileOrStdout (QFile *file, const QString &name) {
+static bool openFileOrStdout (QFile *file, QString &name) {
+	QIODevice::OpenMode openMode = QIODevice::WriteOnly;
+	
+	// Write to stdout or append
 	if (name == QLatin1String ("-")) {
 		return file->open (stdout, QIODevice::WriteOnly);
+	} else if (name.startsWith ('+') && name.length () > 1) {
+		openMode |= QIODevice::Append;
+		name = name.mid (1);
 	}
 	
+	// Open regular file
 	file->setFileName (name);
-	return file->open (QIODevice::WriteOnly);
+	return file->open (openMode);
 }
 
 bool LuaGenerator::generate (const QString &sourceFile, const GenConf &config) {
