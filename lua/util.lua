@@ -68,7 +68,7 @@ end
 -- Returns an array of the 'name' field in all values in 't'
 function elementList(t, name)
 	local r = {}
-	for k, v in ipairs (t) do
+	for k, v in pairs (t) do
 		table.insert (r, v[name])
 	end
 	
