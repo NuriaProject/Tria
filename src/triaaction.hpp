@@ -19,8 +19,40 @@
 #define TRIAACTION_HPP
 
 #include <clang/Frontend/FrontendAction.h>
+#include <clang/Lex/PPCallbacks.h>
+#include <QByteArray>
+#include <QVector>
 
 class Definitions;
+
+class TimingNode {
+public:
+        enum { Skipped = -1 };
+        
+        // 
+        TimingNode (const QByteArray &n, TimingNode *p = nullptr);
+        ~TimingNode ();
+	
+	void print (int indent = 0) const;
+        void stop ();
+	void sort ();
+	
+        // 
+        int time = 0;
+        int startTime = 0;
+        int initTime = 0;
+        int totalTime = Skipped;
+        
+        QByteArray name;
+        
+        QVector< TimingNode * > children;
+        TimingNode *parent;
+	
+private:
+	
+	void printImpl (int indent, const std::vector< char > &depth, float impact, bool last) const;
+};
+
 class TriaAction : public clang::ASTFrontendAction {
 public:
 	
@@ -33,6 +65,34 @@ protected:
 	
 private:
 	Definitions *m_definitions;
+	
+};
+
+class PreprocessorHooks : public clang::PPCallbacks {
+public:
+	PreprocessorHooks (clang::CompilerInstance &ci);
+	~PreprocessorHooks () override;
+	
+	TimingNode *timing () const;
+	
+	void FileChanged (clang::SourceLocation loc, FileChangeReason reason,
+	                  clang::SrcMgr::CharacteristicKind fileType, clang::FileID prevFID) override;
+	
+	void FileSkipped (const clang::FileEntry &, const clang::Token &, clang::SrcMgr::CharacteristicKind);
+	
+	void InclusionDirective (clang::SourceLocation, const clang::Token &, clang::StringRef, bool,
+	                         clang::CharSourceRange, const clang::FileEntry *file, clang::StringRef,
+	                         clang::StringRef, const clang::Module *) override;
+	
+public:
+	void goUp (bool skipped);
+	
+	clang::CompilerInstance &m_compiler;
+	
+	// 
+	QByteArray m_curFile;
+	TimingNode *m_root;
+	TimingNode *m_current;
 	
 };
 

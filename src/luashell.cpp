@@ -17,6 +17,7 @@
 
 #include "luashell.hpp"
 
+#include <clang/Basic/Version.h>
 #include "definitions.hpp"
 #include <lua.hpp>
 #include <cstdio>
@@ -58,7 +59,8 @@ void LuaShell::run () {
 }
 
 void LuaShell::printHeader () {
-	printf ("Tria Lua shell [" __TIME__ " " __DATE__  "]\n");
+	printf ("Tria Lua shell [" __TIME__ " " __DATE__  "] / " LUAJIT_VERSION
+	        " / LLVM " QT_STRINGIFY(LLVM_VERSION_MAJOR) "." QT_STRINGIFY(LLVM_VERSION_MINOR) "\n");
 }
 
 bool LuaShell::invoke () {

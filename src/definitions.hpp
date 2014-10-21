@@ -25,13 +25,16 @@
 #include <QMap>
 #include <QSet>
 
-class QIODevice;
-typedef QSet< QString > StringSet;
 typedef QMap< QString, QString > StringMap;
+typedef QSet< QString > StringSet;
+class TriaAction;
+class TimingNode;
+class QIODevice;
 
 class Definitions {
 public:
 	Definitions (const QString &sourceFileName);
+	~Definitions ();
 	
 	/** Returns the name of the source file. */
 	QString sourceFileName () const;
@@ -92,7 +95,14 @@ public:
 	/** Will avoid \a type when generating code. */
 	void avoidType (const QString &type);
 	
+	/** */
+	TimingNode *timing () const;
+	void parsingComplete ();
+	
 private:
+	friend class TriaAction;
+	
+	void setTimingNode (TimingNode *node);
 	
 	void cleanUpClassDef (ClassDef &def);
 	
@@ -103,6 +113,7 @@ private:
 	StringSet m_avoidedTypes;
 	StringMap m_typeDefs;
 	QVector< ClassDef > m_classes;
+	TimingNode *m_timing = nullptr;
 	
 };
 

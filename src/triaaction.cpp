@@ -20,6 +20,7 @@
 #include <clang/Frontend/CompilerInstance.h>
 #include <llvm/Support/CommandLine.h>
 #include <clang/Lex/Preprocessor.h>
+#include <clang/Basic/FileManager.h>
 #include <clang/Basic/Version.h>
 
 #include "triaastconsumer.hpp"
@@ -27,6 +28,7 @@
 
 #include <QString>
 #include <QDebug>
+#include <QTime>
 
 namespace {
 using namespace llvm;
@@ -37,6 +39,8 @@ cl::opt< bool > argInspectAll ("introspect-all", cl::ValueDisallowed,
 cl::list< std::string > argInspectBases ("introspect-inheriting", cl::CommaSeparated,
 					 cl::desc ("Introspect all types which inherit <type>."),
 					 cl::value_desc ("type1,typeN,..."));
+cl::opt< bool > argVerboseTimes ("verbose-times", cl::ValueDisallowed,
+                                 cl::desc ("Print detailed timings of all processed input files"));
 
 // Aliases
 cl::alias aliasInspectBases ("B", cl::Prefix, cl::desc ("Alias for -introspect-inheriting"),
@@ -50,7 +54,6 @@ TriaAction::TriaAction (Definitions *definitions)
 
 
 clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, llvm::StringRef fileName) {
-	
 	ci.getFrontendOpts().SkipFunctionBodies = true;
 	ci.getPreprocessor().enableIncrementalProcessing (true);
 	ci.getLangOpts().DelayedTemplateParsing = true;
@@ -58,13 +61,16 @@ clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, 
 	// Enable everything for code compatibility
 	ci.getLangOpts().MicrosoftExt = true;
 	ci.getLangOpts().DollarIdents = true;
-#if CLANG_VERSION_MAJOR != 3 || CLANG_VERSION_MINOR > 2
 	ci.getLangOpts().CPlusPlus11 = true;
-#else
-	ci.getLangOpts().CPlusPlus0x = true;
-#endif
 	ci.getLangOpts().CPlusPlus1y = true;
 	ci.getLangOpts().GNUMode = true;
+	
+	if (argVerboseTimes) {
+		PreprocessorHooks *hook = new PreprocessorHooks (ci);
+		hook->timing ()->name = this->m_definitions->sourceFileName ().toLatin1 ();
+		this->m_definitions->setTimingNode (hook->timing ());
+		ci.getPreprocessor ().addPPCallbacks (hook);
+	}
 	
 	// 
 	QStringList whichInherit;
@@ -74,4 +80,168 @@ clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, 
 	
 	// 
 	return new TriaASTConsumer (ci, fileName, whichInherit, argInspectAll, this->m_definitions);
+}
+
+static inline int nowMsec () {
+	return QTime::currentTime ().msecsSinceStartOfDay ();
+}
+
+PreprocessorHooks::PreprocessorHooks (clang::CompilerInstance &ci)
+        : m_compiler (ci), m_root (new TimingNode (QByteArray ())), m_current (m_root)
+{
+	
+	this->m_root->startTime = nowMsec ();
+	
+}
+
+PreprocessorHooks::~PreprocessorHooks () {
+	// 
+}
+
+TimingNode *PreprocessorHooks::timing () const {
+	return this->m_root;
+}
+
+void PreprocessorHooks::FileChanged (clang::SourceLocation loc, clang::PPCallbacks::FileChangeReason reason,
+                                     clang::SrcMgr::CharacteristicKind fileType, clang::FileID prevFID) {
+	int now = nowMsec ();
+	
+	if (reason == EnterFile) { // Stop parents' time
+		TimingNode *p = this->m_current->parent;
+		if (p) {
+			p->time += now - p->startTime;
+		}
+		
+	} else { // Leaving
+		goUp (false);
+	}
+	
+	// 
+	this->m_current->startTime = now;
+	
+}
+
+void PreprocessorHooks::FileSkipped (const clang::FileEntry &, const clang::Token &,
+                                     clang::SrcMgr::CharacteristicKind) {
+	goUp (true);
+}
+
+void PreprocessorHooks::InclusionDirective (clang::SourceLocation, const clang::Token &, clang::StringRef, bool,
+                                            clang::CharSourceRange, const clang::FileEntry *file, clang::StringRef,
+                                            clang::StringRef, const clang::Module *) {
+	
+	this->m_curFile = QByteArray (file->getName ());
+	
+	TimingNode *node = new TimingNode (this->m_curFile, this->m_current);
+	
+	this->m_current->children.append (node);
+	this->m_current = node;
+}
+
+void PreprocessorHooks::goUp (bool skipped) {
+	if (!skipped) {
+		this->m_current->stop ();
+	}
+	
+	// 
+	if (this->m_current->parent) { // Start parents' time again
+		this->m_current = this->m_current->parent;
+		this->m_current->startTime = nowMsec ();
+		
+		if (skipped) {
+			delete this->m_current->children.takeLast ();
+		}
+		
+	}
+	
+}
+
+TimingNode::TimingNode (const QByteArray &n, TimingNode *p)
+        : name (n), parent (p)
+{
+	
+	this->initTime = nowMsec ();
+	
+}
+
+TimingNode::~TimingNode () {
+	qDeleteAll (children);
+}
+
+void TimingNode::print (int indent) const {
+	std::vector< char > depth { /*' '*/ };
+	printImpl (indent, depth, 100.f, true);
+}
+
+void TimingNode::printImpl (int indent, const std::vector< char > &depth, float impact, bool last) const {
+	enum { NameLengthMax = 40 };
+	enum { PadTo = 75 };
+	
+	// 
+	QByteArray prefix (indent, ' ');
+	QByteArray name = this->name;
+	
+	// Shorten name
+	if (name.length () > NameLengthMax + 3) {
+		name = name.mid (name.length () - NameLengthMax);
+		name.prepend ("...");
+	}
+	
+	// Write space indention
+	printf ("%s", prefix.constData ());
+	
+	// Write tree structure
+	for (int i = 1; i < depth.size (); i++) {
+		if (depth.at (i) == ' ') printf ("  ");
+		else printf ("\xE2\x94\x82 "); // |
+	}
+	
+	if (last) {
+		printf ("\xE2\x94\x94"); // |_
+	} else if (this->parent) {
+		printf ("\xE2\x94\x9C"); // |-
+	}
+	
+	// Write name
+	int padLen = PadTo - ((depth.size () + 1) * 2 + 5 + name.length ());
+	if (impact > 99.9f) padLen--; // Account for "100%"
+	QByteArray pad (padLen, ' ');
+	
+	const char *rawName = name.constData ();
+	const char *rawPad = pad.constData ();
+	printf ("\xE2\x94\x80%02.0f%% %s%s[%3ims %3ims]\n", impact, rawName, rawPad, this->time, this->totalTime);
+	
+	// Root?
+	if (!this->parent) {
+		indent += 2;
+	}
+	
+	// Print children
+	auto newDepth = depth;
+	newDepth.push_back (last ? ' ' : '|');
+	
+	float childTime = std::max (1, this->totalTime - this->time);
+	for (int i = 0, count = this->children.length (); i < count; i++) {
+		TimingNode *c = this->children.at (i);
+		float localImpact = float (c->totalTime) / childTime * 100.0f;
+		c->printImpl (indent, newDepth, localImpact, (i + 1 >= count));
+	}
+	
+}
+
+void TimingNode::stop () {
+	this->totalTime = nowMsec () - this->initTime;
+}
+
+static bool timeComp (TimingNode *left, TimingNode *right) {
+	return (left->time > right->time); // Reversed.
+}
+
+void TimingNode::sort () {
+	std::sort (this->children.begin (), this->children.end (), timeComp);
+	
+	for (int i = 0; i < this->children.length (); i++) {
+		this->children.at (i)->sort ();
+	}
+	
 }

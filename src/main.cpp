@@ -132,7 +132,7 @@ static void initClangArguments (const char *progName, std::vector< std::string >
 	
 }
 
-static void printTimes (int total, const std::vector< std::pair< std::string, int > > &times) {
+static void printTimes (int total, const std::vector< std::pair< std::string, int > > &times, Definitions &defs) {
 	if (!argTimes) {
 		return;
 	}
@@ -146,6 +146,13 @@ static void printTimes (int total, const std::vector< std::pair< std::string, in
 		
 		printf ("  %3ims %4.1f%% %s\n", cur,
 		        float (cur) / float (total) * 100.f, stage.first.c_str ());
+	}
+	
+	// 
+	if (defs.timing ()) {
+		printf ("Verbose parsing times: (Files #included multiple times are not shown)\n");
+		defs.timing ()->sort ();
+		defs.timing ()->print (1);
 	}
 	
 	printf ("  %3ims  100%% total\n", total);
@@ -221,6 +228,7 @@ int main (int argc, const char **argv) {
 	}
 	
 	// Generate code
+	definitions.parsingComplete ();
 	times.emplace_back ("parse", timeTotal.elapsed ());
 	
 	// Run generators
@@ -238,6 +246,6 @@ int main (int argc, const char **argv) {
 	fileBuffers.clear ();
 	
 	// 
-	printTimes (timeTotal.elapsed (), times);
+	printTimes (timeTotal.elapsed (), times, definitions);
 	return 0;
 }

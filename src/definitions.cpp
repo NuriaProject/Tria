@@ -26,12 +26,17 @@
 #include <QDebug>
 
 #include <clang/Tooling/Tooling.h>
+#include "triaaction.hpp"
 #include "defs.hpp"
 
 Definitions::Definitions (const QString &sourceFileName)
 	: m_fileName (sourceFileName)
 {
 	
+}
+
+Definitions::~Definitions () {
+	delete this->m_timing;
 }
 
 QString Definitions::sourceFileName () const {
@@ -102,6 +107,21 @@ bool Definitions::isTypeAvoided (const QString &type) {
 
 void Definitions::avoidType (const QString &type) {
 	this->m_avoidedTypes.insert (type);
+}
+
+TimingNode *Definitions::timing () const {
+	return this->m_timing;
+}
+
+void Definitions::parsingComplete () {
+	if (this->m_timing) {
+		this->m_timing->stop ();
+	}
+	
+}
+
+void Definitions::setTimingNode (TimingNode *node) {
+	this->m_timing = node;
 }
 
 template< typename T >
