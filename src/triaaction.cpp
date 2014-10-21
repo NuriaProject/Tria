@@ -234,7 +234,7 @@ void TimingNode::stop () {
 }
 
 static bool timeComp (TimingNode *left, TimingNode *right) {
-	return (left->time > right->time); // Reversed.
+	return (left->totalTime > right->totalTime); // Reversed.
 }
 
 void TimingNode::sort () {
