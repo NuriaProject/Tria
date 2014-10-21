@@ -24,6 +24,7 @@
 #include <QVector>
 #include <QDebug>
 #include <QFile>
+#include <QTime>
 #include <QDir>
 
 #include <clang/Frontend/TextDiagnosticPrinter.h>
@@ -42,6 +43,7 @@
 #include <clang/Driver/Tool.h>
 #include <llvm/Support/Host.h>
 #include <clang/Driver/Job.h>
+#include <vector>
 
 #include "triaastconsumer.hpp"
 #include "luagenerator.hpp"
@@ -68,6 +70,8 @@ cl::list< std::string > argLuaGenerators ("lua-generator", cl::desc ("Lua genera
                                           cl::value_desc ("script:outfile[:arguments]"));
 cl::opt< bool > argLuaShell ("shell", cl::ValueDisallowed,
                              cl::desc ("Opens a Lua shell on stdin/out in the Lua generator environment"));
+cl::opt< bool > argTimes ("times", cl::ValueDisallowed,
+                          cl::desc ("Writes the times each pass takes to stdout"));
 cl::list< std::string > argIncludeDirs ("I", cl::Prefix, cl::desc ("Additional search path"), cl::value_desc ("path"));
 cl::list< std::string > argDefines ("D", cl::Prefix, cl::desc ("#define"), cl::value_desc ("name[=value]"));
 cl::list< std::string > argUndefines ("U", cl::Prefix, cl::desc ("#undef"), cl::value_desc ("name"));
@@ -139,7 +143,7 @@ static QVector< QByteArray > mapVirtualFiles (clang::tooling::ToolInvocation &to
 		buffers += mapVirtualFiles (tool, d, prefix + cur + "/");
 	}
 	
-	for (QString cur : builtinHeaders) {
+	for (const QString &cur : builtinHeaders) {
 		QFile file (directory.filePath (cur));
 		file.open (QIODevice::ReadOnly);
 		
@@ -195,32 +199,27 @@ static void initClangArguments (const char *progName, std::vector< std::string >
 	
 }
 
-int main (int argc, const char **argv) {
-	std::vector< std::string > arguments;
-	
-	// Parse arguments
-	const char *helpTitle = "Tria by the NuriaProject, built on " __DATE__ " " __TIME__;
-	llvm::cl::ParseCommandLineOptions (argc, argv, helpTitle);
-	initClangArguments (argv[0], arguments);
-	
-	// 
-	clang::FileManager *fm = new clang::FileManager ({ "." });
-	
-	// Create tool instance
-	QString sourceFile = QString::fromStdString (argInputFile);
-	Definitions definitions (sourceFile);
-	TriaAction *triaAction = new TriaAction (&definitions);
-	clang::tooling::ToolInvocation tool (arguments, triaAction, fm);
-	
-	// Map shipped built-in headers
-	auto fileBuffers = mapVirtualFiles (tool, QDir (":/headers/"), QStringLiteral ("/builtins/"));
-	
-	// Run it
-	if (!tool.run()) {
-		return 1;
+static void printTimes (int total, const std::vector< std::pair< std::string, int > > &times) {
+	if (!argTimes) {
+		return;
 	}
 	
-	// Generate code
+	// 
+	printf ("Times taken:\n");
+	int prev = 0;
+	for (const std::pair< std::string, int > &stage : times) {
+		int cur = stage.second - prev;
+		prev = stage.second;
+		
+		printf ("  %3ims %4.1f%% %s\n", cur,
+		        float (cur) / float (total) * 100.f, stage.first.c_str ());
+	}
+	
+	printf ("  %3ims  100%% total\n", total);
+	
+}
+
+static QVector< GenConf > generatorsFromArguments () {
 	QVector< GenConf > generators;
 	bool jsonOutput = (argJsonOutputFile.getPosition () > 0);
 	bool cxxOutput = (argCxxOutputFile.getPosition () > 0);
@@ -246,25 +245,66 @@ int main (int argc, const char **argv) {
 	for (const std::string &config : argLuaGenerators) {
 		GenConf genConf;
 		if (!LuaGenerator::parseConfig (config, genConf)) {
-			return 4;
+			exit (4);
 		}
 		
 		generators.append (genConf);
 		
 	}
 	
+	// 
+	return generators;
+}
+
+int main (int argc, const char **argv) {
+	std::vector< std::string > arguments;
+	std::vector< std::pair< std::string, int > > times;
+	
+	QTime timeTotal;
+	timeTotal.start ();
+	
+	// Parse arguments
+	const char *helpTitle = "Tria by the NuriaProject, built on " __DATE__ " " __TIME__;
+	llvm::cl::ParseCommandLineOptions (argc, argv, helpTitle);
+	initClangArguments (argv[0], arguments);
+	QVector< GenConf > generators = generatorsFromArguments ();
+	
+	// 
+	clang::FileManager *fm = new clang::FileManager ({ "." });
+	
+	// Create tool instance
+	QString sourceFile = QString::fromStdString (argInputFile);
+	Definitions definitions (sourceFile);
+	TriaAction *triaAction = new TriaAction (&definitions);
+	clang::tooling::ToolInvocation tool (arguments, triaAction, fm);
+	
+	// Map shipped built-in headers
+	auto fileBuffers = mapVirtualFiles (tool, QDir (":/headers/"), QStringLiteral ("/builtins/"));
+	times.emplace_back ("init", timeTotal.elapsed ());
+	
+	// Run it
+	if (!tool.run()) {
+		return 1;
+	}
+	
+	// Generate code
+	times.emplace_back ("parse", timeTotal.elapsed ());
+	
 	// Run generators
 	LuaGenerator luaGenerator (&definitions);
 	for (int i = 0; i < generators.length (); i++) {
-		if (!luaGenerator.generate (sourceFile, generators.at (i))) {
+		const GenConf &conf = generators.at (i);
+		if (!luaGenerator.generate (sourceFile, conf)) {
 			return 5;
 		}
 		
+		times.emplace_back (conf.luaScript.toStdString (), timeTotal.elapsed ());
 	}
 	
 	// Avoid "fileHandles is unused" warning
 	fileBuffers.clear ();
 	
 	// 
+	printTimes (timeTotal.elapsed (), times);
 	return 0;
 }
