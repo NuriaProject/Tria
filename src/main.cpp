@@ -18,6 +18,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstdio>
+#include <vector>
 
 #include <QStringList>
 #include <QString>
@@ -27,27 +28,13 @@
 #include <QTime>
 #include <QDir>
 
-#include <clang/Frontend/TextDiagnosticPrinter.h>
-#include <clang/Frontend/FrontendActions.h>
-#include <clang/Frontend/FrontendAction.h>
-#include <clang/Basic/DiagnosticIDs.h>
-#include <clang/Driver/Compilation.h>
 #include <llvm/Support/CommandLine.h>
-#include <clang/Lex/LexDiagnostic.h>
-#include <clang/Lex/Preprocessor.h>
 #include <clang/Tooling/Tooling.h>
-#include <clang/AST/ASTContext.h>
 #include <clang/Basic/Version.h>
-#include <clang/Driver/Driver.h>
-#include <clang/AST/DeclCXX.h>
-#include <clang/Driver/Tool.h>
-#include <llvm/Support/Host.h>
-#include <clang/Driver/Job.h>
-#include <vector>
 
-#include "triaastconsumer.hpp"
 #include "luagenerator.hpp"
 #include "definitions.hpp"
+#include "triaaction.hpp"
 
 // Command-line arguments
 namespace {
@@ -60,12 +47,6 @@ cl::opt< std::string > argCxxOutputFile ("cxx-output", cl::ValueOptional, cl::in
 					 cl::desc ("C++ output file"), cl::value_desc ("cpp file"));
 cl::opt< std::string > argJsonOutputFile ("json-output", cl::ValueOptional, cl::init ("-"),
 					  cl::desc ("JSON output file"), cl::value_desc ("json file"));
-cl::opt< bool > argInspectAll ("introspect-all", cl::ValueDisallowed,
-			       cl::desc ("All types will be introspected as if they had a NURIA_INTROSPECT annotation. "
-					 "Types with NURIA_SKIP will be ignored."));
-cl::list< std::string > argInspectBases ("introspect-inheriting", cl::CommaSeparated,
-					 cl::desc ("Introspect all types which inherit <type>."),
-					 cl::value_desc ("type1,typeN,..."));
 cl::list< std::string > argLuaGenerators ("lua-generator", cl::desc ("Lua generator script"),
                                           cl::value_desc ("script:outfile[:arguments]"));
 cl::opt< bool > argLuaShell ("shell", cl::ValueDisallowed,
@@ -79,55 +60,7 @@ cl::list< std::string > argUndefines ("U", cl::Prefix, cl::desc ("#undef"), cl::
 // Aliases
 cl::alias aliasCxxOutputFile ("o", cl::Prefix, cl::desc ("Alias for -cxx-output"), cl::aliasopt (argCxxOutputFile));
 cl::alias aliasJsonOutputFile ("j", cl::Prefix, cl::desc ("Alias for -json-output"), cl::aliasopt (argJsonOutputFile));
-cl::alias aliasInspectBases ("B", cl::Prefix, cl::desc ("Alias for -introspect-inheriting"),
-			     cl::aliasopt (argInspectBases));
 
-}
-
-// 
-class TriaAction : public clang::ASTFrontendAction {
-public:
-	
-	TriaAction (Definitions *definitions)
-		: m_definitions (definitions)
-	{
-	}
-	
-protected:
-	
-	virtual clang::ASTConsumer *CreateASTConsumer (clang::CompilerInstance &ci,
-						       llvm::StringRef fileName) override;
-	
-private:
-	Definitions *m_definitions;
-	
-};
-
-clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, llvm::StringRef fileName) {
-	
-	ci.getFrontendOpts().SkipFunctionBodies = true;
-	ci.getPreprocessor().enableIncrementalProcessing (true);
-	ci.getLangOpts().DelayedTemplateParsing = true;
-	
-	// Enable everything for code compatibility
-	ci.getLangOpts().MicrosoftExt = true;
-	ci.getLangOpts().DollarIdents = true;
-#if CLANG_VERSION_MAJOR != 3 || CLANG_VERSION_MINOR > 2
-	ci.getLangOpts().CPlusPlus11 = true;
-#else
-	ci.getLangOpts().CPlusPlus0x = true;
-#endif
-	ci.getLangOpts().CPlusPlus1y = true;
-	ci.getLangOpts().GNUMode = true;
-	
-	// 
-	QStringList whichInherit;
-	for (const std::string &cur : argInspectBases) {
-		whichInherit.append (QString::fromStdString (cur));
-	}
-	
-	// 
-	return new TriaASTConsumer (ci, fileName, whichInherit, argInspectAll, this->m_definitions);
 }
 
 static QVector< QByteArray > mapVirtualFiles (clang::tooling::ToolInvocation &tool,
