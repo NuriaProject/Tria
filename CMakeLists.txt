@@ -68,6 +68,8 @@ SET(Tria_SRC
     src/triaaction.hpp
     src/triaastconsumer.cpp
     src/triaastconsumer.hpp
+    src/filemapper.cpp
+    src/filemapper.hpp
 )
 
 # Build target

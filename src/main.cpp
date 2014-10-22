@@ -34,6 +34,7 @@
 
 #include "luagenerator.hpp"
 #include "definitions.hpp"
+#include "filemapper.hpp"
 #include "triaaction.hpp"
 
 // Command-line arguments
@@ -61,39 +62,6 @@ cl::list< std::string > argUndefines ("U", cl::Prefix, cl::desc ("#undef"), cl::
 cl::alias aliasCxxOutputFile ("o", cl::Prefix, cl::desc ("Alias for -cxx-output"), cl::aliasopt (argCxxOutputFile));
 cl::alias aliasJsonOutputFile ("j", cl::Prefix, cl::desc ("Alias for -json-output"), cl::aliasopt (argJsonOutputFile));
 
-}
-
-static QVector< QByteArray > mapVirtualFiles (clang::tooling::ToolInvocation &tool,
-                                              const QDir &directory, const QString &prefix) {
-	QVector< QByteArray > buffers;
-	
-	QStringList builtinHeaders = directory.entryList (QDir::Files);
-	QStringList dirs = directory.entryList (QDir::Dirs);
-	
-	for (const QString &cur : dirs) {
-		QDir d = directory;
-		d.cd (cur);
-		buffers += mapVirtualFiles (tool, d, prefix + cur + "/");
-	}
-	
-	for (const QString &cur : builtinHeaders) {
-		QFile file (directory.filePath (cur));
-		file.open (QIODevice::ReadOnly);
-		
-		QByteArray name = prefix.toLatin1 () + cur.toLatin1 ();
-		const char *rawName = name.constData ();
-		
-		QByteArray content = file.readAll ();
-		const char *rawContent = content.constData ();
-		
-		buffers << name << content;
-		
-		llvm::StringRef nameRef (rawName, size_t (name.length ()));
-		llvm::StringRef dataRef (rawContent, size_t (content.length ()));
-		tool.mapVirtualFile (nameRef, dataRef);
-	}
-	
-	return buffers;
 }
 
 static void prefixedAppend (std::vector< std::string > &arguments, llvm::cl::list< std::string > &input,
@@ -149,13 +117,14 @@ static void printTimes (int total, const std::vector< std::pair< std::string, in
 	}
 	
 	// 
+	printf ("  %3ims  100%% total\n", total);
+	
+	// 
 	if (defs.timing ()) {
 		printf ("Verbose parsing times: (Files #included multiple times are not shown)\n");
 		defs.timing ()->sort ();
 		defs.timing ()->print (1);
 	}
-	
-	printf ("  %3ims  100%% total\n", total);
 	
 }
 
@@ -217,9 +186,10 @@ int main (int argc, const char **argv) {
 	Definitions definitions (sourceFile);
 	TriaAction *triaAction = new TriaAction (&definitions);
 	clang::tooling::ToolInvocation tool (arguments, triaAction, fm);
+	FileMapper mapper (tool);
 	
 	// Map shipped built-in headers
-	auto fileBuffers = mapVirtualFiles (tool, QDir (":/headers/"), QStringLiteral ("/builtins/"));
+	mapper.mapRecursive (QDir (":/headers/"), QStringLiteral ("/builtins/"));
 	times.emplace_back ("init", timeTotal.elapsed ());
 	
 	// Run it
@@ -241,9 +211,6 @@ int main (int argc, const char **argv) {
 		
 		times.emplace_back (conf.luaScript.toStdString (), timeTotal.elapsed ());
 	}
-	
-	// Avoid "fileHandles is unused" warning
-	fileBuffers.clear ();
 	
 	// 
 	printTimes (timeTotal.elapsed (), times, definitions);
