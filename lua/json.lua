@@ -95,7 +95,7 @@ end
 
 function fileToJson(file)
 	local r = {}
-	for k, v in pairs(definitions.classes) do
+	for k, v in pairs (findAll (definitions.classes, 'file', file)) do
 		r[v.name] = classToJson (v)
 	end
 	
@@ -103,5 +103,9 @@ function fileToJson(file)
 end
 
 -- 
-out = { [tria.sourceFile] = fileToJson (tria.sourceFile) }
+out = { }
+for k, v in ipairs (tria.sourceFiles) do
+	out[v] = fileToJson (v)
+end
+
 write (json.serialize (out))

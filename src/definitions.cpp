@@ -29,18 +29,17 @@
 #include "triaaction.hpp"
 #include "defs.hpp"
 
-Definitions::Definitions (const QString &sourceFileName)
-	: m_fileName (sourceFileName)
+Definitions::Definitions (const QStringList &sourceFiles)
+	: m_fileNames (sourceFiles)
 {
-	
 }
 
 Definitions::~Definitions () {
 	delete this->m_timing;
 }
 
-QString Definitions::sourceFileName () const {
-	return this->m_fileName;
+QStringList Definitions::sourceFiles () const {
+	return this->m_fileNames;
 }
 
 void Definitions::addClassDefinition (const ClassDef &theClass) {

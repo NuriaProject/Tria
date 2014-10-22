@@ -20,6 +20,7 @@
 
 #include "defs.hpp"
 
+#include <QStringList>
 #include <functional>
 
 #include <QMap>
@@ -33,11 +34,11 @@ class QIODevice;
 
 class Definitions {
 public:
-	Definitions (const QString &sourceFileName);
+	Definitions (const QStringList &sourceFiles);
 	~Definitions ();
 	
-	/** Returns the name of the source file. */
-	QString sourceFileName () const;
+	/** Returns the list of source files. */
+	QStringList sourceFiles () const;
 	
 	/** Adds \a theClass. */
 	void addClassDefinition (const ClassDef &theClass);
@@ -107,7 +108,7 @@ private:
 	void cleanUpClassDef (ClassDef &def);
 	
 	// 
-	QString m_fileName;
+	QStringList m_fileNames;
 	StringSet m_declaredTypes;
 	StringSet m_declareTypes;
 	StringSet m_avoidedTypes;

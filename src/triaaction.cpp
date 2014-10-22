@@ -52,6 +52,14 @@ TriaAction::TriaAction (Definitions *definitions)
         : m_definitions (definitions)
 { }
 
+static QByteArray sourceFileName (const QStringList &files) {
+	if (files.length () == 1) {
+		return files.first ().toLatin1 ();
+	}
+	
+	// 
+	return QByteArrayLiteral("Source files");
+}
 
 clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, llvm::StringRef fileName) {
 	ci.getFrontendOpts().SkipFunctionBodies = true;
@@ -67,7 +75,7 @@ clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, 
 	
 	if (argVerboseTimes) {
 		PreprocessorHooks *hook = new PreprocessorHooks (ci);
-		hook->timing ()->name = this->m_definitions->sourceFileName ().toLatin1 ();
+		hook->timing ()->name = sourceFileName (this->m_definitions->sourceFiles ());
 		this->m_definitions->setTimingNode (hook->timing ());
 		ci.getPreprocessor ().addPPCallbacks (hook);
 	}
@@ -112,7 +120,7 @@ void PreprocessorHooks::FileChanged (clang::SourceLocation loc, clang::PPCallbac
 			p->time += now - p->startTime;
 		}
 		
-	} else { // Leaving
+	} else if (reason == ExitFile) { // Leaving
 		goUp (false);
 	}
 	
@@ -169,13 +177,13 @@ TimingNode::~TimingNode () {
 }
 
 void TimingNode::print (int indent) const {
-	std::vector< char > depth { /*' '*/ };
+	std::vector< char > depth;
 	printImpl (indent, depth, 100.f, true);
 }
 
 void TimingNode::printImpl (int indent, const std::vector< char > &depth, float impact, bool last) const {
 	enum { NameLengthMax = 40 };
-	enum { PadTo = 75 };
+	enum { PadTo = 95 };
 	
 	// 
 	QByteArray prefix (indent, ' ');

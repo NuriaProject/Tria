@@ -98,7 +98,7 @@ static bool openFileOrStdout (QFile *file, QString name) {
 	return file->open (openMode);
 }
 
-bool LuaGenerator::generate (const QString &sourceFile, const GenConf &config) {
+bool LuaGenerator::generate (const GenConf &config) {
 	
 	// Read lua file
 	QByteArray scriptData;
@@ -114,7 +114,7 @@ bool LuaGenerator::generate (const QString &sourceFile, const GenConf &config) {
 	}
 	
 	// 
-	return runScript (sourceFile, config, scriptData, &outHandle);
+	return runScript (config, scriptData, &outHandle);
 }
 
 bool LuaGenerator::loadScript (const QString &path, QByteArray &code) {
@@ -141,8 +141,7 @@ static inline bool loadFromByteArray (lua_State *lua, const QByteArray &code, co
 }
 
 static void reportExecuteError (lua_State *lua, const QString &displayName) {
-	qCritical() << "Failed to execute script" << displayName
-	            << "error:" << lua_tostring(lua, 1);
+	printf ("Failed to execute script %s: %s", qPrintable(displayName), lua_tostring(lua, 1));
 }
 
 static inline bool executeByteArray (lua_State *lua, const QByteArray &code, const QString &displayName) {
@@ -150,10 +149,9 @@ static inline bool executeByteArray (lua_State *lua, const QByteArray &code, con
 	return (r && lua_pcall (lua, 0, 0, 0) == 0);
 }
 
-bool LuaGenerator::runScript (const QString &sourcePath, const GenConf &config,
-                              const QByteArray &script, QFile *outFile) {
+bool LuaGenerator::runScript (const GenConf &config, const QByteArray &script, QFile *outFile) {
 	std::unique_ptr< lua_State, decltype(&lua_close) > lua (lua_open (), &lua_close);
-	initState (lua.get (), sourcePath, config, outFile);
+	initState (lua.get (), config, outFile);
 	exportDefinitions (lua.get ());
 	
 	// Execute script
@@ -174,7 +172,7 @@ void LuaGenerator::startShell (lua_State *lua) {
 	shell.run ();
 }
 
-void LuaGenerator::initState (lua_State *lua, const QString &sourceFile, const GenConf &config, QFile *file) {
+void LuaGenerator::initState (lua_State *lua, const GenConf &config, QFile *file) {
 	luaL_openlibs (lua);
 	
 	// 
@@ -182,7 +180,7 @@ void LuaGenerator::initState (lua_State *lua, const QString &sourceFile, const G
 	addWrite (lua, file);
 	addJson (lua);
 	addLibLoader (lua);
-	addInformation (lua, sourceFile, config);
+	addInformation (lua, config);
 	
 }
 
@@ -196,7 +194,7 @@ static inline void insertBool (lua_State *lua, const char *name, bool value) {
 	lua_setfield (lua, -2, name);
 }
 
-void LuaGenerator::addInformation (lua_State *lua, const QString &sourceFile, const GenConf &config) {
+void LuaGenerator::addInformation (lua_State *lua, const GenConf &config) {
 	lua_createtable (lua, 0, 6);
 	
 	lua_pushliteral(lua, __TIME__);
@@ -209,7 +207,7 @@ void LuaGenerator::addInformation (lua_State *lua, const QString &sourceFile, co
 	lua_setfield (lua, -2, "llvmVersion");
 	
 	insertString (lua, "arguments", config.args);
-	insertString (lua, "sourceFile", sourceFile);
+	exportStringList (lua, "sourceFiles", this->m_definitions->sourceFiles ());
 	insertString (lua, "outFile", config.outFile);
 	insertString (lua, "currentDateTime", QDateTime::currentDateTime ().toString (Qt::ISODate));
 	
@@ -382,6 +380,18 @@ void LuaGenerator::exportStringMap (lua_State *lua, const char *name, const Stri
 	lua_setfield (lua, -2, name);
 }
 
+void LuaGenerator::exportStringList (lua_State *lua, const char *name, const QStringList &list) {
+	lua_createtable (lua, list.length (), 0);
+	
+	for (int i = 0; i < list.length (); i++) {
+		lua_pushstring (lua, list.at (i).toLatin1 ().constData ());
+		lua_rawseti (lua, -2, i + 1);
+	}
+	
+	// 
+	lua_setfield (lua, -2, name);
+}
+
 void LuaGenerator::exportClassDefinitions (lua_State *lua) {
 	QVector< ClassDef > classes = this->m_definitions->classDefintions ();
 	lua_createtable (lua, 0, classes.length ());
@@ -397,7 +407,7 @@ void LuaGenerator::exportClassDefinitions (lua_State *lua) {
 
 void LuaGenerator::exportClassDefinition (lua_State *lua, const ClassDef &def) {
 	lua_pushstring (lua, def.name.toLatin1 ().constData ());
-	lua_createtable (lua, 0, 13);
+	lua_createtable (lua, 0, 14);
 	
 	// 
 	lua_pushvalue (lua, -2);
@@ -433,6 +443,8 @@ void LuaGenerator::exportClassDefinitionBase (lua_State *lua, const ClassDef &de
 	
 	lua_pushboolean (lua, def.implementsCopyCtor);
 	lua_setfield (lua, -2, "implementsCopyCtor");
+	
+	insertString (lua, "file", def.file);
 	
 }
 

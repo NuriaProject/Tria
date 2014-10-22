@@ -63,6 +63,7 @@ private:
 	QString typeDeclName (const clang::NamedDecl *decl, const clang::Type *type);
 	QString typeName (const clang::Type *type);
 	QString typeName (const clang::QualType &type);
+	QString fileOfDecl (clang::TagDecl *decl);
 	
 	bool hasRecordValueSemantics(const clang::CXXRecordDecl *record);
 	bool hasTypeValueSemantics(const clang::QualType &type);
@@ -82,7 +83,6 @@ private:
 	
 	clang::CompilerInstance &m_compiler;
 	clang::ASTContext *m_context = nullptr;
-	clang::FileID m_mainFileId;
 	
 };
 

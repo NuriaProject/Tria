@@ -99,7 +99,7 @@ end
 function findAll(t, key, value)
 	local r = {}
 	for k, v in pairs (t) do
-		if v[key] == value then table.insert (r, k, v) end
+		if v[key] == value then r[k] = v end
 	end
 	return r
 end

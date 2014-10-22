@@ -119,6 +119,7 @@ struct ClassDef {
 	clang::AccessSpecifier access;
 	Bases bases;
 	QString name;
+	QString file;
 	Variables variables;
 	Methods methods;
 	Enums enums;

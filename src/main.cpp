@@ -42,8 +42,7 @@ namespace {
 using namespace llvm;
 
 // Options
-cl::opt< std::string > argInputFile (cl::Positional, cl::desc ("<input file>"), cl::value_desc ("file"));
-cl::list< std::string > argSearchPaths (cl::ConsumeAfter, cl::desc ("<additional search paths (For moc compat)>"));
+cl::list< std::string > argInputFiles (cl::Positional, cl::desc ("<input file(s)>"), cl::value_desc ("file"));
 cl::opt< std::string > argCxxOutputFile ("cxx-output", cl::ValueOptional, cl::init ("-"),
 					 cl::desc ("C++ output file"), cl::value_desc ("cpp file"));
 cl::opt< std::string > argJsonOutputFile ("json-output", cl::ValueOptional, cl::init ("-"),
@@ -95,8 +94,6 @@ static void initClangArguments (const char *progName, std::vector< std::string >
 	prefixedAppend (arguments, argDefines, "-D");
 	prefixedAppend (arguments, argUndefines, "-U");
 	prefixedAppend (arguments, argIncludeDirs, "-I");
-	prefixedAppend (arguments, argSearchPaths, "-I");
-	arguments.push_back (argInputFile);
 	
 }
 
@@ -165,9 +162,35 @@ static QVector< GenConf > generatorsFromArguments () {
 	return generators;
 }
 
+static std::string addInputFiles (QByteArray &fakeHeader) {
+	if (argInputFiles.getNumOccurrences () == 1) {
+		return *std::begin (argInputFiles);
+	}
+	
+	// Multiple files
+	for (const std::string &cur : argInputFiles) {
+		fakeHeader.append ("#include \"");
+		fakeHeader.append (cur.c_str (), cur.length ());
+		fakeHeader.append ("\"\n");
+	}
+	
+	// Map virtual fake header including those files
+	return std::string ("nuriaVirtualHeader.hpp");
+}
+
+static QStringList sourceFileList () {
+	QStringList list;
+	for (const std::string &cur : argInputFiles) {
+		list.append (QString::fromStdString (cur));
+	}
+	
+	return list;
+}
+
 int main (int argc, const char **argv) {
-	std::vector< std::string > arguments;
 	std::vector< std::pair< std::string, int > > times;
+	std::vector< std::string > arguments;
+	QByteArray fakeHeader;
 	
 	QTime timeTotal;
 	timeTotal.start ();
@@ -176,20 +199,25 @@ int main (int argc, const char **argv) {
 	const char *helpTitle = "Tria by the NuriaProject, built on " __DATE__ " " __TIME__;
 	llvm::cl::ParseCommandLineOptions (argc, argv, helpTitle);
 	initClangArguments (argv[0], arguments);
-	QVector< GenConf > generators = generatorsFromArguments ();
+	std::string inputFile = addInputFiles (fakeHeader);
+	arguments.push_back (inputFile);
 	
 	// 
+	QVector< GenConf > generators = generatorsFromArguments ();
 	clang::FileManager *fm = new clang::FileManager ({ "." });
 	
 	// Create tool instance
-	QString sourceFile = QString::fromStdString (argInputFile);
-	Definitions definitions (sourceFile);
+	Definitions definitions (sourceFileList ());
 	TriaAction *triaAction = new TriaAction (&definitions);
 	clang::tooling::ToolInvocation tool (arguments, triaAction, fm);
 	FileMapper mapper (tool);
 	
 	// Map shipped built-in headers
-	mapper.mapRecursive (QDir (":/headers/"), QStringLiteral ("/builtins/"));
+	mapper.mapRecursive (QDir (":/headers/"), QStringLiteral("/builtins/"));
+	if (!fakeHeader.isEmpty ()) {
+		mapper.mapByteArray (fakeHeader, QString::fromStdString (inputFile));
+	}
+	
 	times.emplace_back ("init", timeTotal.elapsed ());
 	
 	// Run it
@@ -205,7 +233,7 @@ int main (int argc, const char **argv) {
 	LuaGenerator luaGenerator (&definitions);
 	for (int i = 0; i < generators.length (); i++) {
 		const GenConf &conf = generators.at (i);
-		if (!luaGenerator.generate (sourceFile, conf)) {
+		if (!luaGenerator.generate (conf)) {
 			return 5;
 		}
 		

@@ -48,7 +48,6 @@ TriaASTConsumer::TriaASTConsumer (clang::CompilerInstance &compiler, const llvm:
 
 void TriaASTConsumer::Initialize (clang::ASTContext &ctx) {
 	this->m_context = &ctx;
-	this->m_mainFileId = this->m_compiler.getSourceManager ().getMainFileID ();
 }
 
 static bool containsAnnotation (const Annotations &list, const QString &name) {
@@ -282,6 +281,20 @@ QString TriaASTConsumer::typeName (const clang::Type *type) {
 
 QString TriaASTConsumer::typeName (const clang::QualType &type) {
 	return typeName (type.getTypePtr ());
+}
+
+QString TriaASTConsumer::fileOfDecl (clang::TagDecl *decl) {
+	clang::SourceManager &mgr = this->m_compiler.getSourceManager ();
+	clang::SourceLocation location = decl->getSourceRange ().getBegin ();
+	clang::SourceLocation fileLocation = mgr.getExpansionLoc (location);
+	
+	// 
+	QString file = llvmToString (mgr.getFilename (fileLocation));
+	if (file.startsWith (QLatin1String("././"))) {
+		return file.mid (4);
+	}
+	
+	return file;
 }
 
 bool TriaASTConsumer::hasRecordValueSemantics (const clang::CXXRecordDecl *record) {
@@ -712,6 +725,7 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	ClassDef classDef;
 	classDef.access = decl->getAccess ();
 	classDef.name = QString::fromStdString (decl->getQualifiedNameAsString ());
+	classDef.file = fileOfDecl (decl);
 	classDef.annotations = annotationsFromDecl (record);
 	
 	// Skip if not to be 'introspected'
@@ -754,10 +768,8 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 		this->m_definitions->avoidType (classDef.name);
 	}
 	
-	// Ignore further information if the type isn't in the main file
-	clang::SourceLocation location = decl->getSourceRange ().getBegin ();
-	clang::SourceLocation fileLocation = this->m_compiler.getSourceManager ().getExpansionLoc (location);
-	if (this->m_compiler.getSourceManager ().getFileID (fileLocation) != this->m_mainFileId) {
+	// Ignore further information if the type isn't in the source file(s)
+	if (!this->m_definitions->sourceFiles ().contains (classDef.file)) {
 		return;
 	}
 	

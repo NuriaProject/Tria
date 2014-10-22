@@ -34,17 +34,16 @@ public:
 	LuaGenerator (Definitions *definitions);
 	
 	static bool parseConfig (const std::string &string, GenConf &config);
-	bool generate (const QString &sourceFile, const GenConf &config);
+	bool generate (const GenConf &config);
 	
 private:
 	
 	bool loadScript (const QString &path, QByteArray &code);
-	bool runScript (const QString &soucePath, const GenConf &config,
-	                const QByteArray &script, QFile *outFile);
+	bool runScript (const GenConf &config, const QByteArray &script, QFile *outFile);
 	void startShell (lua_State *lua);
 	
-	void initState (lua_State *lua, const QString &sourceFile, const GenConf &config, QFile *file);
-	void addInformation (lua_State *lua, const QString &sourceFile, const GenConf &config);
+	void initState (lua_State *lua, const GenConf &config, QFile *file);
+	void addInformation (lua_State *lua, const GenConf &config);
 	void addLog (lua_State *lua);
 	void addJson (lua_State *lua);
 	void addWrite (lua_State *lua, QFile *file);
@@ -53,6 +52,7 @@ private:
 	void exportDefinitions (lua_State *lua);
 	void exportStringSet (lua_State *lua, const char *name, const StringSet &set);
 	void exportStringMap (lua_State *lua, const char *name, const StringMap &map);
+	void exportStringList (lua_State *lua, const char *name, const QStringList &list);
 	void exportClassDefinitions (lua_State *lua);
 	void exportClassDefinition (lua_State *lua, const ClassDef &def);
 	void exportClassDefinitionBase (lua_State *lua, const ClassDef &def);
