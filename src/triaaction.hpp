@@ -38,10 +38,10 @@ public:
 	void sort ();
 	
         // 
-        int time = 0;
-        int startTime = 0;
-        int initTime = 0;
-        int totalTime = Skipped;
+        qint64 time = 0;
+        qint64 startTime = 0;
+        qint64 initTime = 0;
+        qint64 totalTime = Skipped;
         
         QByteArray name;
         

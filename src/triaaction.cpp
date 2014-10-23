@@ -30,6 +30,10 @@
 #include <QDebug>
 #include <QTime>
 
+#ifdef Q_OS_UNIX
+#include <sys/time.h>
+#endif
+
 namespace {
 using namespace llvm;
 
@@ -90,15 +94,22 @@ clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, 
 	return new TriaASTConsumer (ci, fileName, whichInherit, argInspectAll, this->m_definitions);
 }
 
-static inline int nowMsec () {
-	return QTime::currentTime ().msecsSinceStartOfDay ();
+static inline qint64 nowUsec () {
+#ifdef Q_OS_UNIX
+	timeval tv;
+	::gettimeofday (&tv, nullptr);
+	
+	return qint64 (tv.tv_sec * 1000000) + tv.tv_usec;
+#else
+	return qint64 (QTime::currentTime ().msecsSinceStartOfDay ()) * 1000;
+#endif
 }
 
 PreprocessorHooks::PreprocessorHooks (clang::CompilerInstance &ci)
         : m_compiler (ci), m_root (new TimingNode (QByteArray ())), m_current (m_root)
 {
 	
-	this->m_root->startTime = nowMsec ();
+	this->m_root->startTime = nowUsec ();
 	
 }
 
@@ -112,7 +123,7 @@ TimingNode *PreprocessorHooks::timing () const {
 
 void PreprocessorHooks::FileChanged (clang::SourceLocation loc, clang::PPCallbacks::FileChangeReason reason,
                                      clang::SrcMgr::CharacteristicKind fileType, clang::FileID prevFID) {
-	int now = nowMsec ();
+	qint64 now = nowUsec ();
 	
 	if (reason == EnterFile) { // Stop parents' time
 		TimingNode *p = this->m_current->parent;
@@ -154,7 +165,7 @@ void PreprocessorHooks::goUp (bool skipped) {
 	// 
 	if (this->m_current->parent) { // Start parents' time again
 		this->m_current = this->m_current->parent;
-		this->m_current->startTime = nowMsec ();
+		this->m_current->startTime = nowUsec ();
 		
 		if (skipped) {
 			delete this->m_current->children.takeLast ();
@@ -168,7 +179,7 @@ TimingNode::TimingNode (const QByteArray &n, TimingNode *p)
         : name (n), parent (p)
 {
 	
-	this->initTime = nowMsec ();
+	this->initTime = nowUsec ();
 	
 }
 
@@ -217,7 +228,8 @@ void TimingNode::printImpl (int indent, const std::vector< char > &depth, float 
 	
 	const char *rawName = name.constData ();
 	const char *rawPad = pad.constData ();
-	printf ("\xE2\x94\x80%02.0f%% %s%s[%3ims %3ims]\n", impact, rawName, rawPad, this->time, this->totalTime);
+	printf ("\xE2\x94\x80%02.0f%% %s%s[%3ims %3ims]\n", impact, rawName, rawPad,
+	        this->time / 1000, this->totalTime / 1000);
 	
 	// Root?
 	if (!this->parent) {
@@ -228,7 +240,7 @@ void TimingNode::printImpl (int indent, const std::vector< char > &depth, float 
 	auto newDepth = depth;
 	newDepth.push_back (last ? ' ' : '|');
 	
-	float childTime = std::max (1, this->totalTime - this->time);
+	float childTime = std::max (1LL, this->totalTime - this->time);
 	for (int i = 0, count = this->children.length (); i < count; i++) {
 		TimingNode *c = this->children.at (i);
 		float localImpact = float (c->totalTime) / childTime * 100.0f;
@@ -238,7 +250,7 @@ void TimingNode::printImpl (int indent, const std::vector< char > &depth, float 
 }
 
 void TimingNode::stop () {
-	this->totalTime = nowMsec () - this->initTime;
+	this->totalTime = nowUsec () - this->initTime;
 }
 
 static bool timeComp (TimingNode *left, TimingNode *right) {
