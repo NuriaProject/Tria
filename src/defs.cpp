@@ -80,6 +80,11 @@ QDebug operator<< (QDebug dbg, const MethodDef &method) {
 	}
 	
 	dbg << ")";
+	
+	if (method.isConst) {
+		dbg << " const";
+	}
+	
 	return dbg.maybeSpace ();
 }
 
