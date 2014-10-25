@@ -185,16 +185,18 @@ Annotations TriaASTConsumer::annotationsFromDecl (clang::Decl *decl) {
 		llvm::StringRef annotation = cur->getAnnotation ();
 		QString data = QString::fromUtf8 (annotation.data (), annotation.size ());
 		
+		// Read
+		AnnotationDef def;
 		if (data.startsWith (customAnnotation)) {
-			list.prepend (parseNuriaAnnotate (data));
-			
-		} else {
-			// Annotation without a additional value
-			AnnotationDef def;
+			def = parseNuriaAnnotate (data);
+		} else { // Annotation without an additional value
 			def.name = data;
 			def.value = annotationValue (data, def.type);
-			list.prepend (def);
 		}
+		
+		// Store
+		def.loc = attr->getRange ();
+		list.prepend (def);
 		
 	}
 	
@@ -361,6 +363,7 @@ bool TriaASTConsumer::hasTypeValueSemantics (const clang::QualType &type) {
 BaseDef TriaASTConsumer::processBase (clang::CXXBaseSpecifier *specifier) {
 	BaseDef base;
 	
+	base.loc = specifier->getSourceRange ();
 	base.name = typeName (specifier->getType ());
 	base.access = specifier->getAccessSpecifier ();
 	base.isVirtual = specifier->isVirtual ();
@@ -502,6 +505,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 	MethodDef def;
 	
 	// Base information
+	def.loc = decl->getSourceRange ();
 	def.access = (decl->getAccess () == clang::AS_none) ? clang::AS_public : decl->getAccess ();
 	def.isVirtual = decl->isVirtual ();
 	def.isConst = clang::Qualifiers::fromCVRMask (decl->getTypeQualifiers ()).hasConst ();
@@ -600,6 +604,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 		conv.toType = (def.type == ConstructorMethod)
 			      ? classDef.name : def.returnType;
 		conv.isConst = def.isConst && (def.type == MemberMethod || def.arguments.first ().isConst);
+		conv.loc = def.loc;
 		
 		// 
 		classDef.conversions.append (conv);
@@ -623,6 +628,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 VariableDef TriaASTConsumer::processVariable (clang::FieldDecl *decl) {
 	VariableDef def;
 	
+	def.loc = decl->getSourceRange ();
 	def.access = (decl->getAccess () == clang::AS_none) ? clang::AS_public : decl->getAccess ();
 	def.type = typeName (decl->getType ());
 	def.name = llvmToString (decl->getName ());
@@ -654,6 +660,7 @@ void TriaASTConsumer::processEnum (ClassDef &classDef, clang::EnumDecl *decl) {
 	
 	// 
 	EnumDef def;
+	def.loc = decl->getSourceRange ();
 	def.name = llvmToString (decl->getName ());
 	def.annotations = annotations;
 	
@@ -684,6 +691,7 @@ void TriaASTConsumer::processConversion (ClassDef &classDef, clang::CXXConversio
 	}
 	
 	ConversionDef conv;
+	conv.loc = convDecl->getSourceRange ();
 	conv.type = MemberMethod;
 	conv.isConst = convDecl->isConst ();
 	conv.fromType = classDef.name;
@@ -723,6 +731,7 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	
 	// Base data
 	ClassDef classDef;
+	classDef.loc = decl->getSourceRange ();
 	classDef.access = decl->getAccess ();
 	classDef.name = QString::fromStdString (decl->getQualifiedNameAsString ());
 	classDef.file = fileOfDecl (decl);
@@ -845,6 +854,7 @@ void TriaASTConsumer::addDefaultConstructor (ClassDef &classDef) {
 
 void TriaASTConsumer::addDefaultCopyConstructor (ClassDef &classDef) {
 	VariableDef argument;
+	argument.loc = classDef.loc;
 	argument.isConst = true;
 	argument.name = QStringLiteral("other");
 	argument.type = classDef.name;
@@ -855,6 +865,7 @@ void TriaASTConsumer::addDefaultCopyConstructor (ClassDef &classDef) {
 void TriaASTConsumer::addConstructor (ClassDef &classDef, const Variables &arguments) {
 	MethodDef def;
 	def.access = clang::AS_public;
+	def.loc = classDef.loc;
 	def.type = ConstructorMethod;
 	def.isVirtual = false;
 	def.isConst = false;

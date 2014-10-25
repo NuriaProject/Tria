@@ -18,6 +18,7 @@
 #ifndef DEFS_HPP
 #define DEFS_HPP
 
+#include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/Specifiers.h>
 #include <QMetaType>
 #include <QString>
@@ -41,6 +42,7 @@ enum AnnotationType {
 };
 
 struct AnnotationDef {
+	clang::SourceRange loc;
 	AnnotationType type;
 	QString name;
 	QString value;
@@ -51,6 +53,7 @@ struct AnnotationDef {
 typedef QVector< AnnotationDef > Annotations;
 
 struct VariableDef {
+	clang::SourceRange loc;
 	clang::AccessSpecifier access;
 	
 	QString name;
@@ -72,6 +75,7 @@ struct VariableDef {
 typedef QVector< VariableDef > Variables;
 
 struct MethodDef {
+	clang::SourceRange loc;
 	clang::AccessSpecifier access;
 	MethodType type;
 	bool isVirtual;
@@ -88,6 +92,7 @@ struct MethodDef {
 typedef QVector< MethodDef > Methods;
 
 struct ConversionDef {
+	clang::SourceRange loc;
 	QString methodName;
 	MethodType type;
 	QString fromType;
@@ -99,6 +104,7 @@ typedef QVector< ConversionDef > Conversions;
 
 struct BaseDef {
 	clang::AccessSpecifier access;
+	clang::SourceRange loc;
 	bool isVirtual;
 	QString name;
 	
@@ -107,6 +113,8 @@ struct BaseDef {
 typedef QVector< BaseDef > Bases;
 
 struct EnumDef {
+	clang::SourceRange loc;
+	
 	QString name;
 	QMap< QString, int > elements;
 	Annotations annotations;
@@ -117,6 +125,7 @@ typedef QVector< EnumDef > Enums;
 
 struct ClassDef {
 	clang::AccessSpecifier access;
+	clang::SourceRange loc;
 	Bases bases;
 	QString name;
 	QString file;
