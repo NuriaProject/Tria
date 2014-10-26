@@ -279,14 +279,28 @@ static bool logString (lua_State *lua, Compiler *compiler, clang::DiagnosticsEng
 	return false;
 }
 
+static clang::SourceRange *sourceRangePointer (lua_State *lua, int idx) {
+	void *ptr = nullptr;
+	
+	if (lua_istable(lua, idx)) {
+		lua_getfield (lua, idx, "loc");
+		ptr = luaL_checkudata (lua, -1, METATABLE_SOURCERANGE);
+		lua_pop(lua, 1);
+	} else {
+		ptr = luaL_checkudata (lua, 1, METATABLE_SOURCERANGE);
+	}
+	
+	// 
+	return (clang::SourceRange *)ptr;
+}
+
 static bool logRangeString (lua_State *lua, Compiler *compiler, clang::DiagnosticsEngine::Level level) {
-	void *ptr = luaL_checkudata (lua, 1, METATABLE_SOURCERANGE);
-	if (!ptr || !lua_isstring (lua, 2)) {
+	if (!lua_isstring (lua, 2)) {
 		return false;
 	}
 	
 	// 
-	clang::SourceRange &range = *(clang::SourceRange *)ptr;
+	clang::SourceRange &range = *sourceRangePointer (lua, 1);
 	llvm::StringRef msg = luaStringToStringRef (lua, 2);
 	compiler->textDiag ()->emitDiagnostic (range.getBegin (), level, msg,
 	                                       llvm::ArrayRef< clang::CharSourceRange > (),
