@@ -25,6 +25,7 @@
 
 class Definitions;
 
+// 
 class TimingNode {
 public:
         enum { Skipped = -1 };
@@ -53,6 +54,7 @@ private:
 	void printImpl (int indent, const std::vector< char > &depth, float impact, bool last) const;
 };
 
+// 
 class TriaAction : public clang::ASTFrontendAction {
 public:
 	
@@ -68,6 +70,7 @@ private:
 	
 };
 
+// 
 class PreprocessorHooks : public clang::PPCallbacks {
 public:
 	PreprocessorHooks (clang::CompilerInstance &ci);

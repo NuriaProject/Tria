@@ -21,6 +21,7 @@
 #include "definitions.hpp"
 
 struct lua_State;
+class Compiler;
 class QFile;
 
 struct GenConf {
@@ -31,7 +32,7 @@ struct GenConf {
 
 class LuaGenerator {
 public:
-	LuaGenerator (Definitions *definitions);
+	LuaGenerator (Definitions *definitions, Compiler *compiler);
 	
 	static bool parseConfig (const std::string &string, GenConf &config);
 	bool generate (const GenConf &config);
@@ -48,6 +49,7 @@ private:
 	void addJson (lua_State *lua);
 	void addWrite (lua_State *lua, QFile *file);
 	void addLibLoader (lua_State *lua);
+	void registerSourceRangeMetatable (lua_State *lua);
 	
 	void exportDefinitions (lua_State *lua);
 	void exportStringSet (lua_State *lua, const char *name, const StringSet &set);
@@ -68,7 +70,10 @@ private:
 	
 	static int jsonSerialize (lua_State *lua);
 	
+	static int sourceRangeToString (lua_State *lua);
+	
 	Definitions *m_definitions;
+	Compiler *m_compiler;
 	
 };
 

@@ -227,7 +227,7 @@ int main (int argc, const char **argv) {
 	times.emplace_back ("parse", timeTotal.elapsed ());
 	
 	// Run generators
-	LuaGenerator luaGenerator (&definitions);
+	LuaGenerator luaGenerator (&definitions, &compiler);
 	for (int i = 0; i < generators.length (); i++) {
 		const GenConf &conf = generators.at (i);
 		if (!luaGenerator.generate (conf)) {

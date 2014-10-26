@@ -23,11 +23,15 @@
 #include <QDebug>
 #include <QFile>
 
-#include <clang/Tooling/Tooling.h>
+#include <clang/Frontend/CompilerInstance.h>
+#include <clang/Frontend/TextDiagnostic.h>
 #include "definitions.hpp"
+#include "compiler.hpp"
 #include "luashell.hpp"
 #include <lua.hpp>
 #include <cstdio>
+
+#define METATABLE_SOURCERANGE "clang::SourceRange"
 
 #if 0
 static void dumpStack (lua_State *lua) {
@@ -48,8 +52,8 @@ static void dumpStack (lua_State *lua) {
 }
 #endif
 
-LuaGenerator::LuaGenerator (Definitions *definitions)
-	: m_definitions (definitions)
+LuaGenerator::LuaGenerator (Definitions *definitions, Compiler *compiler)
+	: m_definitions (definitions), m_compiler (compiler)
 {
 	
 }
@@ -181,6 +185,19 @@ void LuaGenerator::initState (lua_State *lua, const GenConf &config, QFile *file
 	addJson (lua);
 	addLibLoader (lua);
 	addInformation (lua, config);
+	registerSourceRangeMetatable (lua);
+	
+}
+
+static void pushSourceRange (lua_State *lua, const clang::SourceRange &range) {
+	
+	// Copy range to lua
+	void *ptr = lua_newuserdata (lua, sizeof(clang::SourceRange));
+	new (ptr) clang::SourceRange (range);
+	
+	// Set metatable
+	luaL_getmetatable(lua, METATABLE_SOURCERANGE);
+	lua_setmetatable (lua, -2);
 	
 }
 
@@ -191,6 +208,11 @@ static inline void insertString (lua_State *lua, const char *name, const QString
 
 static inline void insertBool (lua_State *lua, const char *name, bool value) {
 	lua_pushboolean (lua, value);
+	lua_setfield (lua, -2, name);
+}
+
+static inline void insertSourceRange (lua_State *lua, const char *name, const clang::SourceRange &range) {
+	pushSourceRange (lua, range);
 	lua_setfield (lua, -2, name);
 }
 
@@ -214,77 +236,105 @@ void LuaGenerator::addInformation (lua_State *lua, const GenConf &config) {
 	lua_setfield (lua, LUA_GLOBALSINDEX, "tria");
 }
 
-static const char *logLevelName (int level) {
-	switch (level) {
-	case QtCriticalMsg: return "error";
-	case QtWarningMsg: return "warning";
-	default: return "note";
-	}
+static clang::SourceRange getSourceRangePointer (lua_State *lua, int pos) {
+	void *ptr = luaL_checkudata (lua, pos, METATABLE_SOURCERANGE);
+	luaL_argcheck(lua, ptr != nullptr, 1, METATABLE_SOURCERANGE " expected");
 	
+	// 
+	return *(clang::SourceRange *)ptr;
 }
 
-static void printStackElement (lua_State *lua, int idx) {
-	int type = lua_type (lua, idx);
-	switch (type) {
-	case LUA_TNIL:
-		printf ("nil ");
-		break;
-	case LUA_TBOOLEAN:
-		printf (lua_toboolean (lua, idx) ? "true " : "false ");
-		break;
-	case LUA_TLIGHTUSERDATA:
-	case LUA_TUSERDATA:
-		printf ("userdata(%p) ", lua_touserdata (lua, idx));
-		break;
-	case LUA_TFUNCTION:
-		printf ("<function> ");
-		break;
-	case LUA_TTABLE:
-		printf ("<table> "); // TODO: Dump table
-		break;
-	default: {
-		const char *str = lua_tolstring (lua, idx, NULL);
-		if (str) {
-			printf ("%s ", str);
-		} else {
-			printf ("<instance of %s> ", lua_typename (lua, lua_type (lua, idx)));
-		}
-	} break;
+static clang::SourceRange getSourceRangeTable (lua_State *lua, int pos) {
+	lua_getfield (lua, pos, "loc");
+	clang::SourceRange result = getSourceRangePointer (lua, -1);
+	lua_pop(lua, 1);
+	return result;
+}
+
+static clang::SourceRange getSourceRange (lua_State *lua) {
+	if (lua_istable(lua, 1)) {
+		return getSourceRangeTable (lua, 1);
 	}
 	
+	return getSourceRangePointer (lua, 1);
+}
+
+static llvm::StringRef luaStringToStringRef (lua_State *lua, int idx) {
+	size_t len = 0;
+	const char *message = lua_tolstring (lua, idx, &len);
+	return llvm::StringRef (message, len);
+}
+
+static clang::StoredDiagnostic luaStringToStoredDiag (lua_State *lua, int idx, clang::DiagnosticsEngine::Level level,
+                                                      clang::DiagnosticsEngine *diag) {
+	return clang::StoredDiagnostic (level, clang::Diagnostic (diag, luaStringToStringRef (lua, idx)));
+}
+
+static bool logString (lua_State *lua, Compiler *compiler, clang::DiagnosticsEngine::Level level) {
+	if (lua_isstring (lua, 1)) {
+		compiler->diag ()->Report (luaStringToStoredDiag (lua, 1, level, compiler->diag ()));
+		return true;
+	}
+	
+	return false;
+}
+
+static bool logRangeString (lua_State *lua, Compiler *compiler, clang::DiagnosticsEngine::Level level) {
+	void *ptr = luaL_checkudata (lua, 1, METATABLE_SOURCERANGE);
+	if (!ptr || !lua_isstring (lua, 2)) {
+		return false;
+	}
+	
+	// 
+	clang::SourceRange &range = *(clang::SourceRange *)ptr;
+	llvm::StringRef msg = luaStringToStringRef (lua, 2);
+	compiler->textDiag ()->emitDiagnostic (range.getBegin (), level, msg,
+	                                       llvm::ArrayRef< clang::CharSourceRange > (),
+	                                       llvm::ArrayRef< clang::FixItHint > (),
+	                                       &compiler->compiler ()->getSourceManager ());
+	return true;
 }
 
 static int luaLog (lua_State *lua) {
 	int level = lua_tointeger (lua, lua_upvalueindex(1));
+	Compiler *comp = (Compiler *)lua_touserdata (lua, lua_upvalueindex(2));
 	int argc = lua_gettop (lua);
+	bool ok = false;
 	
-	fprintf (stderr, "%s: ", logLevelName (level));
-	for (int i = 1; i <= argc; i++) {
-		printStackElement (lua, i);
+	// Which form was used?
+	if (argc == 1) { // String only form
+		ok = logString (lua, comp, clang::DiagnosticsEngine::Level (level));
+	} else if (argc == 2) { // SourceRange, String form
+		ok = logRangeString (lua, comp, clang::DiagnosticsEngine::Level (level));
 	}
 	
 	// 
-	printf ("\n");
+	if (!ok) {
+		return luaL_error (lua, "Log methods expect (String) or (SourceRange, String) as arguments");
+	}
+	
 	return 0;
+}
+
+static void addLogFunc (lua_State *lua, const char *name, clang::DiagnosticsEngine::Level level, Compiler *compiler) {
+	lua_pushinteger (lua, level);
+	lua_pushlightuserdata (lua, compiler);
+	lua_pushcclosure (lua, &luaLog, 2);
+	lua_setfield (lua, -2, name);
 	
 }
 
 void LuaGenerator::addLog (lua_State *lua) {
 	
 	// 
-	lua_createtable (lua, 0, 3);
+	lua_createtable (lua, 0, 6);
 	
-	lua_pushinteger (lua, QtCriticalMsg);
-	lua_pushcclosure (lua, &luaLog, 1);
-	lua_setfield (lua, -2, "error");
-	
-	lua_pushinteger (lua, QtWarningMsg);
-	lua_pushcclosure (lua, &luaLog, 1);
-	lua_setfield (lua, -2, "warn");
-	
-	lua_pushinteger (lua, QtDebugMsg);
-	lua_pushcclosure (lua, &luaLog, 1);
-	lua_setfield (lua, -2, "note");
+	addLogFunc (lua, "ignored", clang::DiagnosticsEngine::Ignored, this->m_compiler);
+	addLogFunc (lua, "note", clang::DiagnosticsEngine::Note, this->m_compiler);
+	addLogFunc (lua, "remark", clang::DiagnosticsEngine::Remark, this->m_compiler);
+	addLogFunc (lua, "warning", clang::DiagnosticsEngine::Warning, this->m_compiler);
+	addLogFunc (lua, "error", clang::DiagnosticsEngine::Error, this->m_compiler);
+	addLogFunc (lua, "fatal", clang::DiagnosticsEngine::Fatal, this->m_compiler);
 	
 	// 
 	lua_setfield (lua, LUA_GLOBALSINDEX, "log");
@@ -335,6 +385,22 @@ void LuaGenerator::addLibLoader (lua_State *lua) {
 	
 	// 
 	lua_pop(lua, 2);
+}
+
+void LuaGenerator::registerSourceRangeMetatable (lua_State *lua) {
+	luaL_newmetatable (lua, METATABLE_SOURCERANGE);
+	
+	// meta.__index = meta
+	lua_pushvalue (lua, -1);
+	lua_setfield (lua, -2, "__index");
+	
+	// meta.__tostring = sourceRangeToString()
+	lua_pushlightuserdata (lua, this->m_compiler);
+	lua_pushcclosure (lua, &LuaGenerator::sourceRangeToString, 1);
+	lua_setfield (lua, -2, "__tostring");
+	
+	// 
+	lua_pop(lua, 1);
 }
 
 void LuaGenerator::exportDefinitions (lua_State *lua) {
@@ -407,7 +473,7 @@ void LuaGenerator::exportClassDefinitions (lua_State *lua) {
 
 void LuaGenerator::exportClassDefinition (lua_State *lua, const ClassDef &def) {
 	lua_pushstring (lua, def.name.toLatin1 ().constData ());
-	lua_createtable (lua, 0, 14);
+	lua_createtable (lua, 0, 15);
 	
 	// 
 	lua_pushvalue (lua, -2);
@@ -445,7 +511,7 @@ void LuaGenerator::exportClassDefinitionBase (lua_State *lua, const ClassDef &de
 	lua_setfield (lua, -2, "implementsCopyCtor");
 	
 	insertString (lua, "file", def.file);
-	
+	insertSourceRange (lua, "loc", def.loc);
 }
 
 static void pushAccessSpecifier (lua_State *lua, clang::AccessSpecifier spec) {
@@ -475,9 +541,10 @@ void LuaGenerator::exportBases (lua_State *lua, const Bases &bases) {
 		const BaseDef &base = bases.at (i);
 		
 		lua_pushstring (lua, base.name.toLatin1 ().constData ());
-		lua_createtable (lua, 0, 2);
+		lua_createtable (lua, 0, 3);
 		
 		insertBool (lua, "isVirtual", base.isVirtual);
+		insertSourceRange (lua, "loc", base.loc);
 		
 		pushAccessSpecifier (lua, base.access);
 		lua_setfield (lua, -2, "access");
@@ -519,10 +586,11 @@ void LuaGenerator::exportAnnotations (lua_State *lua, const Annotations &annotat
 	lua_createtable (lua, annotations.length (), 0);
 	for (int i = 0; i < annotations.length (); i++) {
 		const AnnotationDef &cur = annotations.at (i);
-		lua_createtable (lua, 0, 4);
+		lua_createtable (lua, 0, 5);
 		
 		insertString (lua, "name", cur.name);
 		insertString (lua, "value", cur.value);
+		insertSourceRange (lua, "loc", cur.loc);
 		
 		pushAnnotationType (lua, cur.type);
 		lua_setfield (lua, -2, "type");
@@ -566,7 +634,7 @@ void LuaGenerator::exportVariables (lua_State *lua, const char *name, const Vari
 	lua_createtable (lua, variables.length (), 0);
 	for (int i = 0; i < variables.length (); i++) {
 		const VariableDef &var = variables.at (i);
-		lua_createtable (lua, 0, 12);
+		lua_createtable (lua, 0, 13);
 		
 		// 
 		lua_pushstring (lua, var.name.toLatin1 ().constData ());
@@ -575,6 +643,7 @@ void LuaGenerator::exportVariables (lua_State *lua, const char *name, const Vari
 		pushAccessSpecifier (lua, var.access);
 		lua_setfield (lua, -2, "access");
 		
+		insertSourceRange (lua, "loc", var.loc);
 		insertString (lua, "type", var.type);
 		insertString (lua, "getter", var.getter);
 		insertString (lua, "setterArgName", var.setterArgName);
@@ -598,7 +667,7 @@ void LuaGenerator::exportMethods (lua_State *lua, const Methods &methods) {
 	lua_createtable (lua, methods.length (), 0);
 	for (int i = 0; i < methods.length (); i++) {
 		const MethodDef &m = methods.at (i);
-		lua_createtable (lua, 0, 10);
+		lua_createtable (lua, 0, 11);
 		
 		// 
 		pushAccessSpecifier (lua, m.access);
@@ -615,6 +684,7 @@ void LuaGenerator::exportMethods (lua_State *lua, const Methods &methods) {
 		exportAnnotations (lua, m.annotations);
 		insertBool (lua, "hasOptionalArguments", m.hasOptionalArguments);
 		insertBool (lua, "returnTypeIsPod", m.returnTypeIsPod);
+		insertSourceRange (lua, "loc", m.loc);
 		
 		// 
 		lua_rawseti (lua, -2, i + 1);
@@ -629,7 +699,7 @@ void LuaGenerator::exportEnums (lua_State *lua, const Enums &enums) {
 	for (int i = 0; i < enums.length (); i++) {
 		const EnumDef &e = enums.at (i);
 		lua_pushstring (lua, e.name.toLatin1 ().constData ());
-		lua_createtable (lua, 0, 3);
+		lua_createtable (lua, 0, 4);
 		
 		// 
 		lua_pushvalue (lua, -2);
@@ -637,6 +707,7 @@ void LuaGenerator::exportEnums (lua_State *lua, const Enums &enums) {
 		
 		exportAnnotations (lua, e.annotations);
 		exportEnumValues (lua, e.elements);
+		insertSourceRange (lua, "loc", e.loc);
 		
 		// 
 		lua_settable (lua, -3);
@@ -668,7 +739,7 @@ void LuaGenerator::exportConversions (lua_State *lua, const Conversions &convers
 	lua_createtable (lua, conversions.length (), 0);
 	for (int i = 0; i < conversions.length (); i++) {
 		const ConversionDef &conv = conversions.at (i);
-		lua_createtable (lua, 0, 5);
+		lua_createtable (lua, 0, 6);
 		
 		// 
 		pushMethodType (lua, conv.type);
@@ -678,6 +749,7 @@ void LuaGenerator::exportConversions (lua_State *lua, const Conversions &convers
 		insertString (lua, "fromType", conv.fromType);
 		insertString (lua, "toType", conv.toType);
 		insertBool (lua, "isConst", conv.isConst);
+		insertSourceRange (lua, "loc", conv.loc);
 		
 		// 
 		lua_rawseti (lua, -2, i + 1);
@@ -792,5 +864,27 @@ int LuaGenerator::jsonSerialize (lua_State *lua) {
 	
 	// Return
 	lua_pushstring (lua, data.constData ());
+	return 1;
+}
+
+int LuaGenerator::sourceRangeToString (lua_State *lua) {
+	Compiler *comp = (Compiler *)lua_touserdata (lua, lua_upvalueindex(1));
+	void *ptr = luaL_checkudata (lua, 1, METATABLE_SOURCERANGE);
+	clang::SourceRange *range = static_cast< clang::SourceRange * > (ptr);
+	
+	if (!range) {
+		return 0;
+	}
+	
+	// Create string
+	clang::SourceManager &sm = comp->compiler ()->getSourceManager ();
+	std::string begin = range->getBegin ().printToString (sm);
+	std::string end = range->getEnd ().printToString (sm);
+	lua_pushliteral(lua, "[");
+	lua_pushlstring (lua, begin.c_str (), begin.length ());
+	lua_pushliteral(lua, "]:[");
+	lua_pushlstring (lua, end.c_str (), end.length ());
+	lua_pushliteral(lua, "]");
+	lua_concat (lua, 5);
 	return 1;
 }
