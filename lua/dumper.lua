@@ -1,4 +1,6 @@
 -- As taken from: http://lua-users.org/wiki/DataDumper (10/20/2014)
+-- Modifications:
+--  - userdata variables are dumped using their __tostring() meta method.
 
 --[[ DataDumper.lua
 Copyright (c) 2007 Olivetti-Engineering SA
@@ -96,7 +98,7 @@ function DataDumper(value, varname, fastmode, ident)
     ['function'] = function(value) 
       return string_format("loadstring(%q)", string_dump(value)) 
     end,
-    userdata = function() error("Cannot dump userdata") end,
+    userdata = function(value) return strvalcache[tostring(value)] end,
     thread = function() error("Cannot dump threads") end,
   }
   local function test_defined(value, path)
