@@ -36,6 +36,7 @@
 #include "definitions.hpp"
 #include "filemapper.hpp"
 #include "triaaction.hpp"
+#include "compiler.hpp"
 
 // Command-line arguments
 namespace {
@@ -162,12 +163,13 @@ static QVector< GenConf > generatorsFromArguments () {
 	return generators;
 }
 
-static std::string addInputFiles (QByteArray &fakeHeader) {
+static std::string addInputFiles (FileMapper &mapper) {
 	if (argInputFiles.getNumOccurrences () == 1) {
 		return *std::begin (argInputFiles);
 	}
 	
 	// Multiple files
+	QByteArray fakeHeader;
 	for (const std::string &cur : argInputFiles) {
 		fakeHeader.append ("#include \"");
 		fakeHeader.append (cur.c_str (), cur.length ());
@@ -175,6 +177,7 @@ static std::string addInputFiles (QByteArray &fakeHeader) {
 	}
 	
 	// Map virtual fake header including those files
+	mapper.mapByteArray (fakeHeader, QStringLiteral("nuriaVirtualHeader.hpp"));
 	return std::string ("nuriaVirtualHeader.hpp");
 }
 
@@ -190,7 +193,7 @@ static QStringList sourceFileList () {
 int main (int argc, const char **argv) {
 	std::vector< std::pair< std::string, int > > times;
 	std::vector< std::string > arguments;
-	QByteArray fakeHeader;
+	FileMapper mapper;
 	
 	QTime timeTotal;
 	timeTotal.start ();
@@ -199,30 +202,24 @@ int main (int argc, const char **argv) {
 	const char *helpTitle = "Tria by the NuriaProject, built on " __DATE__ " " __TIME__;
 	llvm::cl::ParseCommandLineOptions (argc, argv, helpTitle);
 	initClangArguments (argv[0], arguments);
-	std::string inputFile = addInputFiles (fakeHeader);
+	std::string inputFile = addInputFiles (mapper);
 	arguments.push_back (inputFile);
 	
 	// 
 	QVector< GenConf > generators = generatorsFromArguments ();
-	clang::FileManager *fm = new clang::FileManager ({ "." });
+	mapper.mapRecursive (QDir (":/headers/"), QStringLiteral("/builtins/"));
 	
 	// Create tool instance
 	Definitions definitions (sourceFileList ());
-	TriaAction *triaAction = new TriaAction (&definitions);
-	clang::tooling::ToolInvocation tool (arguments, triaAction, fm);
-	FileMapper mapper (tool);
-	
-	// Map shipped built-in headers
-	mapper.mapRecursive (QDir (":/headers/"), QStringLiteral("/builtins/"));
-	if (!fakeHeader.isEmpty ()) {
-		mapper.mapByteArray (fakeHeader, QString::fromStdString (inputFile));
+	Compiler compiler (&definitions);
+	if (!compiler.prepare (&mapper, arguments)) {
+		return 1;
 	}
 	
-	times.emplace_back ("init", timeTotal.elapsed ());
-	
 	// Run it
-	if (!tool.run()) {
-		return 1;
+	times.emplace_back ("init", timeTotal.elapsed ());
+	if (!compiler.run ()) {
+		return 2;
 	}
 	
 	// Generate code

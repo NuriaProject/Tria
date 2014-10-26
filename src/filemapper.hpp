@@ -20,23 +20,24 @@
 
 #include <clang/Tooling/Tooling.h>
 #include <QByteArray>
-#include <QVector>
 #include <QDir>
+#include <QMap>
 
+class Compiler;
 class FileMapper {
 public:
 	
-	FileMapper (clang::tooling::ToolInvocation &tool);
+	FileMapper ();
 	
 	void mapRecursive (const QDir &directory, const QString &prefix);
 	void mapFile (const QString &path, const QString &target);
 	void mapByteArray (const QByteArray &data, const QString &target);
 	
+	void applyMapping (Compiler *compiler);
+	
 private:
 	
-	clang::tooling::ToolInvocation &m_tool;
-	QVector< QByteArray > m_buffers;
-	
+	QMap< QByteArray, QByteArray > m_files;
 	
 };
 

@@ -17,11 +17,13 @@
 
 #include "filemapper.hpp"
 
+#include <clang/Frontend/CompilerInvocation.h>
 #include <QString>
 
-FileMapper::FileMapper(clang::tooling::ToolInvocation &tool)
-        : m_tool (tool)
-{
+#include <llvm/Support/MemoryBuffer.h>
+#include "compiler.hpp"
+
+FileMapper::FileMapper () {
 	
 }
 
@@ -49,16 +51,18 @@ void FileMapper::mapFile (const QString &path, const QString &target) {
 }
 
 void FileMapper::mapByteArray (const QByteArray &data, const QString &target) {
-	QByteArray name = target.toLatin1 ();
+	this->m_files.insert (target.toLatin1 (), data);
+}
+
+void FileMapper::applyMapping (Compiler *compiler) {
+	clang::CompilerInvocation *invocation = compiler->invocation ();
 	
-	const char *rawContent = data.constData ();
-	const char *rawName = name.constData ();
-	
-	this->m_buffers.append (name);
-	this->m_buffers.append (data);
-	
-	llvm::StringRef nameRef (rawName, size_t (name.length ()));
-	llvm::StringRef dataRef (rawContent, size_t (data.length ()));
-	this->m_tool.mapVirtualFile (nameRef, dataRef);
+	for (auto it = this->m_files.begin (), end = this->m_files.end (); it != end; ++it) {
+		llvm::StringRef name (it.key ().constData (), it.key ().length ());
+		llvm::StringRef data (it->constData (), it->length ());
+		
+		llvm::MemoryBuffer *input = llvm::MemoryBuffer::getMemBuffer (data);
+		invocation->getPreprocessorOpts ().addRemappedFile (name, input);
+	}
 	
 }
