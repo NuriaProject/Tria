@@ -25,6 +25,7 @@
 
 #include <QString>
 #include <QDebug>
+#include <QDir>
 
 #include "definitions.hpp"
 #include "defs.hpp"
@@ -38,11 +39,15 @@ static const QString requireAnnotation = QStringLiteral ("nuria_require:");
 
 TriaASTConsumer::TriaASTConsumer (clang::CompilerInstance &compiler, const llvm::StringRef &fileName,
 				  const QStringList &introspectBases, bool introspectAll,
-				  Definitions *definitions)
+                                  const std::string &globalClass, Definitions *definitions)
 	: m_definitions (definitions), m_introspectedBases (introspectBases),
 	  m_introspectAll (introspectAll), m_compiler (compiler)
 {
 	Q_UNUSED(fileName)
+	
+	this->m_globals.isFakeClass = true;
+	this->m_globals.access = clang::AS_public;
+	this->m_globals.name = QString::fromStdString (globalClass);
 	
 }
 
@@ -150,6 +155,10 @@ AnnotationDef TriaASTConsumer::parseNuriaAnnotate (const QString &data) {
 }
 
 bool TriaASTConsumer::derivesFromIntrospectClass (const clang::CXXRecordDecl *record) {
+	if (!record || this->m_introspectedBases.isEmpty ()) {
+		return false;
+	}
+	
 	for (auto it = record->bases_begin (); it != record->bases_end (); ++it) {
 		const clang::CXXBaseSpecifier &specifier = *it;
 		const clang::Type *type = specifier.getType ().getTypePtr ();
@@ -285,18 +294,30 @@ QString TriaASTConsumer::typeName (const clang::QualType &type) {
 	return typeName (type.getTypePtr ());
 }
 
-QString TriaASTConsumer::fileOfDecl (clang::TagDecl *decl) {
+static QString filePathOfFileId (clang::SourceManager &mgr, clang::FileID fileId) {
+	QString file = QString::fromUtf8 (mgr.getFileEntryForID (fileId)->getName ());
+	if (QFileInfo (file).isAbsolute ()) {
+		return file;
+	}
+	
+	// Clean up relative path
+	return QDir::current ().relativeFilePath (file);
+}
+
+QString TriaASTConsumer::fileOfDecl (clang::Decl *decl) {
 	clang::SourceManager &mgr = this->m_compiler.getSourceManager ();
 	clang::SourceLocation location = decl->getSourceRange ().getBegin ();
 	clang::SourceLocation fileLocation = mgr.getExpansionLoc (location);
+	clang::FileID fileId = mgr.getFileID (fileLocation);
 	
 	// 
-	QString file = llvmToString (mgr.getFilename (fileLocation));
-	if (file.startsWith (QLatin1String("././"))) {
-		return file.mid (4);
+	if (!this->m_pathCache.contains (fileId)) {
+		QString path = filePathOfFileId (mgr, fileId);
+		this->m_pathCache.insert (fileId, path);
+		return path;
 	}
 	
-	return file;
+	return this->m_pathCache.value (fileId);
 }
 
 bool TriaASTConsumer::hasRecordValueSemantics (const clang::CXXRecordDecl *record) {
@@ -358,6 +379,20 @@ bool TriaASTConsumer::hasTypeValueSemantics (const clang::Type *type) {
 
 bool TriaASTConsumer::hasTypeValueSemantics (const clang::QualType &type) {
 	return hasTypeValueSemantics (type.getTypePtr ());
+}
+
+bool TriaASTConsumer::shouldIntrospect (const Annotations &annotations, bool isGlobal, clang::CXXRecordDecl *record) {
+	if (containsAnnotation (annotations, skipAnnotation)) {
+		return false;
+	}
+	
+	if (this->m_introspectAll) {
+		return true;
+	}
+	
+	return (!isGlobal ||
+	        containsAnnotation (annotations, introspectAnnotation) ||
+	        derivesFromIntrospectClass (record));
 }
 
 BaseDef TriaASTConsumer::processBase (clang::CXXBaseSpecifier *specifier) {
@@ -486,7 +521,7 @@ bool TriaASTConsumer::registerReadWriteMethod (ClassDef &classDef, MethodDef &de
 	return true;
 }
 
-static inline clang::QualType getMethodResultType (clang::CXXMethodDecl *decl) {
+static inline clang::QualType getMethodResultType (clang::FunctionDecl *decl) {
 #if CLANG_VERSION_MINOR > 4
 	return decl->getReturnType ();
 #else
@@ -494,10 +529,11 @@ static inline clang::QualType getMethodResultType (clang::CXXMethodDecl *decl) {
 #endif
 }
 
-void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl) {
+void TriaASTConsumer::processMethod (ClassDef &classDef, clang::FunctionDecl *decl, bool isGlobal) {
 	static const QString fromMethod = QStringLiteral ("from");
 	static const QString toMethod = QStringLiteral ("to");
 	
+	clang::CXXMethodDecl *method = llvm::dyn_cast< clang::CXXMethodDecl > (decl);
 	clang::CXXConstructorDecl *ctor = llvm::dyn_cast< clang::CXXConstructorDecl > (decl);
 	clang::CXXDestructorDecl *dtor = llvm::dyn_cast< clang::CXXDestructorDecl > (decl);
 	clang::CXXConversionDecl *convDecl = llvm::dyn_cast< clang::CXXConversionDecl > (decl);
@@ -507,9 +543,17 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 	// Base information
 	def.loc = decl->getSourceRange ();
 	def.access = (decl->getAccess () == clang::AS_none) ? clang::AS_public : decl->getAccess ();
-	def.isVirtual = decl->isVirtual ();
-	def.isConst = clang::Qualifiers::fromCVRMask (decl->getTypeQualifiers ()).hasConst ();
+	def.isVirtual = (method) ? method->isVirtual () : false;
+	def.isConst = false;
 	def.annotations = annotationsFromDecl (decl);
+	
+	if (method) {
+		def.isConst = clang::Qualifiers::fromCVRMask (method->getTypeQualifiers ()).hasConst ();
+	}
+	
+	if (!shouldIntrospect (def.annotations, isGlobal)) {
+		return;
+	}
 	
 	// Skip non-public methods. skipped methods and methods which are default-implemented
 	bool resultTypeHasValueSemantics = hasTypeValueSemantics (getMethodResultType (decl));
@@ -534,7 +578,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 		clang::QualType resultType = getMethodResultType (decl);
 		def.name = llvmToString (decl->getName ());
 		def.returnType = typeName (resultType);
-		def.type = decl->isStatic () ? StaticMethod : MemberMethod;
+		def.type = (!method) ? StaticMethod : (method->isStatic () ? StaticMethod : MemberMethod);
 		def.returnTypeIsPod = resultType.isPODType (*this->m_context);
 		
 		// Ignore method if the result is a const pointer.
@@ -587,12 +631,12 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::CXXMethodDecl *d
 	}
 	
 	// Is this a read/write method for a field?
-	if (registerReadWriteMethod (classDef, def, decl)) {
+	if (method && registerReadWriteMethod (classDef, def, method)) {
 		return;
 	}
 	
 	// Final check if this is a conversion method
-	if (canConvert && 
+	if (method && canConvert && 
 	    (def.type == ConstructorMethod ||
 	     (def.type == StaticMethod && def.name.startsWith (fromMethod)) ||
 	     (def.type == MemberMethod && !hasMandatoryArgument && def.name.startsWith (toMethod)))) {
@@ -649,12 +693,12 @@ VariableDef TriaASTConsumer::processVariable (clang::FieldDecl *decl) {
 	return def;
 }
 
-void TriaASTConsumer::processEnum (ClassDef &classDef, clang::EnumDecl *decl) {
+void TriaASTConsumer::processEnum (ClassDef &classDef, clang::EnumDecl *decl, bool isGlobal) {
 	clang::AccessSpecifier access = decl->getAccess ();
 	Annotations annotations = annotationsFromDecl (decl);
 	
 	if ((access != clang::AS_public && access != clang::AS_none) ||
-	    containsAnnotation (annotations, skipAnnotation)) {
+	    !shouldIntrospect (annotations, isGlobal)) {
 		return;
 	}
 	
@@ -703,12 +747,43 @@ void TriaASTConsumer::processConversion (ClassDef &classDef, clang::CXXConversio
 }
 
 void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
-	static const llvm::StringRef qMetaTypeIdName ("QMetaTypeId");
+	clang::CXXRecordDecl *record = llvm::dyn_cast< clang::CXXRecordDecl > (decl);
+	clang::EnumDecl *enumDecl = llvm::dyn_cast< clang::EnumDecl > (decl);
 	
-	clang::CXXRecordDecl *record = llvm::dyn_cast< clang::CXXRecordDecl >(decl);
-	if (!record) {
-		return;
+	if (record) {
+		processClass (record);
+	} else if (enumDecl) {
+		processEnum (this->m_globals, enumDecl, true);
 	}
+	
+}
+
+bool TriaASTConsumer::HandleTopLevelDecl (clang::DeclGroupRef groupRef) {
+	for (auto it = groupRef.begin (), end = groupRef.end (); it != end; ++it) {
+		if (!this->m_definitions->sourceFiles ().contains (fileOfDecl (*it))) {
+			continue;
+		}
+		
+		if (clang::FunctionDecl *function = llvm::dyn_cast< clang::FunctionDecl > (*it)) {
+			processMethod (this->m_globals, function, true);
+		}
+		
+	}
+	
+	return true;
+}
+
+void TriaASTConsumer::HandleTranslationUnit (clang::ASTContext &) {
+	if (!this->m_globals.name.isEmpty () &&
+	    (!this->m_globals.enums.isEmpty () ||
+	     !this->m_globals.methods.isEmpty ())) {
+		this->m_definitions->addClassDefinition (this->m_globals);
+	}
+	
+}
+
+void TriaASTConsumer::processClass (clang::CXXRecordDecl *record) {
+	static const llvm::StringRef qMetaTypeIdName ("QMetaTypeId");
 	
 	// 
 	bool typeHasValueSemantics = hasTypeValueSemantics (record->getTypeForDecl ());
@@ -717,7 +792,7 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	}
 	
 	// Check if this is a QMetaTypeId specialization (Result of a Q_DECLARE_METATYPE)
-	clang::ClassTemplateSpecializationDecl *templ = llvm::dyn_cast< clang::ClassTemplateSpecializationDecl > (decl);
+	clang::ClassTemplateSpecializationDecl *templ = llvm::dyn_cast< clang::ClassTemplateSpecializationDecl > (record);
 	
 	if (templ && templ->getName () == qMetaTypeIdName) {
 		const clang::TemplateArgumentList &list = templ->getTemplateArgs ();
@@ -731,23 +806,14 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	
 	// Base data
 	ClassDef classDef;
-	classDef.loc = decl->getSourceRange ();
-	classDef.access = decl->getAccess ();
-	classDef.name = QString::fromStdString (decl->getQualifiedNameAsString ());
-	classDef.file = fileOfDecl (decl);
+	classDef.loc = record->getSourceRange ();
+	classDef.access = record->getAccess ();
+	classDef.name = QString::fromStdString (record->getQualifiedNameAsString ());
+	classDef.file = fileOfDecl (record);
 	classDef.annotations = annotationsFromDecl (record);
 	
 	// Skip if not to be 'introspected'
-	if (!this->m_introspectAll &&
-	    !containsAnnotation (classDef.annotations, introspectAnnotation)) {
-		if (this->m_introspectedBases.isEmpty () || !derivesFromIntrospectClass (record)) {
-			return;
-		}
-		
-	}
-	
-	// Skip anyway?
-	if (containsAnnotation (classDef.annotations, skipAnnotation)) {
+	if (!shouldIntrospect (classDef.annotations, true, record)) {
 		return;
 	}
 	

@@ -45,6 +45,8 @@ cl::list< std::string > argInspectBases ("introspect-inheriting", cl::CommaSepar
 					 cl::value_desc ("type1,typeN,..."));
 cl::opt< bool > argVerboseTimes ("verbose-times", cl::ValueDisallowed,
                                  cl::desc ("Print detailed timings of all processed input files"));
+cl::opt< std::string > argGlobalClass ("global-class", cl::value_desc ("class name"),
+                                       cl::desc ("Fake class to put globals (methods, enums) into"));
 
 // Aliases
 cl::alias aliasInspectBases ("B", cl::Prefix, cl::desc ("Alias for -introspect-inheriting"),
@@ -91,7 +93,8 @@ clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, 
 	}
 	
 	// 
-	return new TriaASTConsumer (ci, fileName, whichInherit, argInspectAll, this->m_definitions);
+	return new TriaASTConsumer (ci, fileName, whichInherit, argInspectAll,
+	                            argGlobalClass, this->m_definitions);
 }
 
 static inline qint64 nowUsec () {

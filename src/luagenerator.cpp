@@ -487,7 +487,7 @@ void LuaGenerator::exportClassDefinitions (lua_State *lua) {
 
 void LuaGenerator::exportClassDefinition (lua_State *lua, const ClassDef &def) {
 	lua_pushstring (lua, def.name.toLatin1 ().constData ());
-	lua_createtable (lua, 0, 15);
+	lua_createtable (lua, 0, 16);
 	
 	// 
 	lua_pushvalue (lua, -2);
@@ -506,24 +506,13 @@ void LuaGenerator::exportClassDefinition (lua_State *lua, const ClassDef &def) {
 }
 
 void LuaGenerator::exportClassDefinitionBase (lua_State *lua, const ClassDef &def) {
-	lua_pushboolean (lua, def.hasValueSemantics);
-	lua_setfield (lua, -2, "hasValueSemantics");
-	
-	lua_pushboolean (lua, def.hasDefaultCtor);
-	lua_setfield (lua, -2, "hasDefaultCtor");
-	
-	lua_pushboolean (lua, def.hasCopyCtor);
-	lua_setfield (lua, -2, "hasCopyCtor");
-	
-	lua_pushboolean (lua, def.hasAssignmentOperator);
-	lua_setfield (lua, -2, "hasAssignmentOperator");
-	
-	lua_pushboolean (lua, def.implementsCtor);
-	lua_setfield (lua, -2, "implementsCtor");
-	
-	lua_pushboolean (lua, def.implementsCopyCtor);
-	lua_setfield (lua, -2, "implementsCopyCtor");
-	
+	insertBool (lua, "hasValueSemantics", def.hasValueSemantics);
+	insertBool (lua, "hasDefaultCtor", def.hasDefaultCtor);
+	insertBool (lua, "hasCopyCtor", def.hasCopyCtor);
+	insertBool (lua, "hasAssignmentOperator", def.hasAssignmentOperator);
+	insertBool (lua, "implementsCtor", def.implementsCtor);
+	insertBool (lua, "implementsCopyCtor", def.implementsCopyCtor);
+	insertBool (lua, "isFakeClass", def.isFakeClass);
 	insertString (lua, "file", def.file);
 	insertSourceRange (lua, "loc", def.loc);
 }

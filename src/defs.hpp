@@ -135,10 +135,11 @@ struct ClassDef {
 	Conversions conversions;
 	Annotations annotations;
 	
-	bool hasValueSemantics;
-	bool hasDefaultCtor;
-	bool hasCopyCtor;
-	bool hasAssignmentOperator;
+	bool isFakeClass = false;
+	bool hasValueSemantics = false;
+	bool hasDefaultCtor = false;
+	bool hasCopyCtor = false;
+	bool hasAssignmentOperator = false;
 	bool implementsCtor = false;
 	bool implementsCopyCtor = false;
 	

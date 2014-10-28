@@ -36,10 +36,12 @@ class TriaASTConsumer : public clang::ASTConsumer {
 public:
 	TriaASTConsumer (clang::CompilerInstance &compiler, const llvm::StringRef &fileName,
 			 const QStringList &introspectBases, bool introspectAll,
-			 Definitions *definitions);
+			 const std::string &globalClass, Definitions *definitions);
 	
 	void Initialize (clang::ASTContext &ctx) override;
 	void HandleTagDeclDefinition (clang::TagDecl *decl) override;
+	bool HandleTopLevelDecl (clang::DeclGroupRef groupRef) override;
+	void HandleTranslationUnit (clang::ASTContext &) override;
 	
 private:
 	void addDefaultConstructors (ClassDef &classDef);
@@ -63,23 +65,27 @@ private:
 	QString typeDeclName (const clang::NamedDecl *decl, const clang::Type *type);
 	QString typeName (const clang::Type *type);
 	QString typeName (const clang::QualType &type);
-	QString fileOfDecl (clang::TagDecl *decl);
+	QString fileOfDecl (clang::Decl *decl);
 	
 	bool hasRecordValueSemantics(const clang::CXXRecordDecl *record);
 	bool hasTypeValueSemantics(const clang::QualType &type);
 	bool hasTypeValueSemantics(const clang::Type *type);
 	
+	bool shouldIntrospect (const Annotations &annotations, bool isGlobal, clang::CXXRecordDecl *record = nullptr);
+	void processClass (clang::CXXRecordDecl *record);
 	BaseDef processBase (clang::CXXBaseSpecifier *specifier);
 	bool registerReadWriteMethod (ClassDef &classDef, MethodDef &def, clang::CXXMethodDecl *decl);
-	void processMethod (ClassDef &classDef, clang::CXXMethodDecl *decl);
+	void processMethod (ClassDef &classDef, clang::FunctionDecl *decl, bool isGlobal = false);
 	VariableDef processVariable (clang::FieldDecl *decl);
-	void processEnum (ClassDef &classDef, clang::EnumDecl *decl);
+	void processEnum (ClassDef &classDef, clang::EnumDecl *decl, bool isGlobal = false);
 	void processConversion (ClassDef &classDef, clang::CXXConversionDecl *convDecl);
 	
 	// 
+	QMap< clang::FileID, QString > m_pathCache;
 	Definitions *m_definitions;
 	QStringList m_introspectedBases;
 	bool m_introspectAll;
+	ClassDef m_globals;
 	
 	clang::CompilerInstance &m_compiler;
 	clang::ASTContext *m_context = nullptr;
