@@ -115,10 +115,12 @@ function writeInclude(file)
 	write ("#include \"" .. file .. "\"\n")
 end
 
-function writeClassDeclareMetatype(name, valueSemantics)
-	writeDeclareMetatype (name .. '*')
-	if valueSemantics then
-		writeDeclareMetatype (name)
+function writeClassDeclareMetatype(class)
+	if class.isFakeClass then return end
+	
+	writeDeclareMetatype (class.name .. '*')
+	if class.hasValueSemantics then
+		writeDeclareMetatype (class.name)
 	end
 end
 
@@ -150,7 +152,10 @@ function metaObjectClassName(name)
 	return "tria_" .. escapeName (name) .. "_metaObject"
 end
 
-function classMetaTypeId(class)
+function classMetaTypeId(class, asPointer)
+	if class.isFakeClass then return "0" end
+	if asPointer then return "qMetaTypeId< " .. class.name .. " * > ()" end
+	
 	if class.hasValueSemantics and
 	   not table.containsValue (definitions.avoidedTypes, class.name) then
 		return "qMetaTypeId< " .. class.name .. " > ()"
@@ -393,7 +398,9 @@ function methodInvoke(class, method, args, typeName)
 	local method = (type(method) == 'string') and method or method.name
 	local class = (type(class) == 'string') and class or class.name
 	
-	if typeName == 'constructor' then
+	if class.isFakeClass then
+		return method .. '(' .. args .. ')'
+	elseif typeName == 'constructor' then
 		if args ~= '' then args = ' (' .. args .. ')' end
 		return 'new ' .. class .. args
 	elseif typeName == 'member' then
@@ -429,14 +436,14 @@ function useMethodTrampoline(class, method)
 end
 
 function lambdaCallback(class, method)
-	local call = nil
+	local call = ''
 	local args = methodArguments (method)
 	local passArgs = table.concat (elementList (method.arguments, 'name'), ', ')
 	
 	-- 
 	if method.type == 'member' then
 		call = reinterpretCast (class) .. '->'
-	else
+	elseif not class.isFakeClass then
 		call = class.name .. '::'
 	end
 	
@@ -458,7 +465,7 @@ function methodToCallback(class, method)
 	end
 	
 	-- Direct callbacks
-	local fullName = class.name .. '::' .. method.name
+	local fullName = class.isFakeClass and method.name or class.name .. '::' .. method.name
 	local cast = functionPointerType(class, method)
 	local cbArgs = '(' .. cast .. ')&' .. fullName
 	if method.type == 'member' then
@@ -736,10 +743,10 @@ function writeClassDef(name, class)
 	       "    return " .. qByteArray (name) .. ";\n" ..
 	       "  }\n\n" ..
 	       "  int _metaTypeId () const {\n" ..
-	       "    return " .. classMetaTypeId (class) .. ";\n" ..
+	       "    return " .. classMetaTypeId (class, false) .. ";\n" ..
 	       "  }\n\n" ..
 	       "  int _pointerMetaTypeId () const {\n" ..
-	       "    return qMetaTypeId< " .. name .. " * > ();\n" ..
+	       "    return " .. classMetaTypeId (class, true) .. ";\n" ..
 	       "  }\n\n" ..
 	       "  void _destroy (void *__instance) {\n" ..
 	       "    delete " .. reinterpretCast (class) .. ";\n" ..
@@ -803,7 +810,10 @@ end
 function writeRegisterMetaObjectClass(class)
 	local m = metaObjectClassName(class.name)
 	write ("    Nuria::MetaObject::registerMetaObject (new " .. m .. ");\n")
-	write ("    " .. registerMetaType (class.name .. ' *'))
+	
+	if not class.isFakeClass then
+		write ("    " .. registerMetaType (class.name .. ' *'))
+	end
 	
 	if class.hasValueSemantics then
 		write ("    " .. registerMetaType (class.name))
@@ -862,7 +872,7 @@ for k, v in ipairs(tria.sourceFiles) do writeInclude (v) end
 write ("\n")
 
 -- Q_DECLARE_METATYPEs
-for k,v in pairs(definitions.classes) do writeClassDeclareMetatype (k, v.hasValueSemantics) end
+for k,v in pairs(definitions.classes) do writeClassDeclareMetatype (v) end
 for k,v in ipairs(definitions.declareTypes) do writeDeclareMetatype (v) end
 
 -- 
