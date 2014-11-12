@@ -54,6 +54,8 @@ cl::opt< bool > argLuaShell ("shell", cl::ValueDisallowed,
                              cl::desc ("Opens a Lua shell on stdin/out in the Lua generator environment"));
 cl::opt< bool > argTimes ("times", cl::ValueDisallowed,
                           cl::desc ("Writes the times each pass takes to stdout"));
+cl::list< std::string > argSysDirs ("isystem", cl::desc ("Include path treated as system path"),
+                                    cl::value_desc ("path"));
 cl::list< std::string > argIncludeDirs ("I", cl::Prefix, cl::desc ("Additional search path"), cl::value_desc ("path"));
 cl::list< std::string > argDefines ("D", cl::Prefix, cl::desc ("#define"), cl::value_desc ("name[=value]"));
 cl::list< std::string > argUndefines ("U", cl::Prefix, cl::desc ("#undef"), cl::value_desc ("name"));
@@ -95,6 +97,7 @@ static void initClangArguments (const char *progName, std::vector< std::string >
 	prefixedAppend (arguments, argDefines, "-D");
 	prefixedAppend (arguments, argUndefines, "-U");
 	prefixedAppend (arguments, argIncludeDirs, "-I");
+	prefixedAppend (arguments, argSysDirs, "-isystem");
 	
 }
 
