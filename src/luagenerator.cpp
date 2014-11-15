@@ -487,7 +487,7 @@ void LuaGenerator::exportClassDefinitions (lua_State *lua) {
 
 void LuaGenerator::exportClassDefinition (lua_State *lua, const ClassDef &def) {
 	lua_pushstring (lua, def.name.toLatin1 ().constData ());
-	lua_createtable (lua, 0, 16);
+	lua_createtable (lua, 0, 17);
 	
 	// 
 	lua_pushvalue (lua, -2);
@@ -513,6 +513,7 @@ void LuaGenerator::exportClassDefinitionBase (lua_State *lua, const ClassDef &de
 	insertBool (lua, "implementsCtor", def.implementsCtor);
 	insertBool (lua, "implementsCopyCtor", def.implementsCopyCtor);
 	insertBool (lua, "isFakeClass", def.isFakeClass);
+	insertBool (lua, "hasPureVirtuals", def.hasPureVirtuals);
 	insertString (lua, "file", def.file);
 	insertSourceRange (lua, "loc", def.loc);
 }
@@ -670,7 +671,7 @@ void LuaGenerator::exportMethods (lua_State *lua, const Methods &methods) {
 	lua_createtable (lua, methods.length (), 0);
 	for (int i = 0; i < methods.length (); i++) {
 		const MethodDef &m = methods.at (i);
-		lua_createtable (lua, 0, 11);
+		lua_createtable (lua, 0, 12);
 		
 		// 
 		pushAccessSpecifier (lua, m.access);
@@ -680,6 +681,7 @@ void LuaGenerator::exportMethods (lua_State *lua, const Methods &methods) {
 		lua_setfield (lua, -2, "type");
 		
 		insertBool (lua, "isVirtual", m.isVirtual);
+		insertBool (lua, "isPure", m.isPure);
 		insertBool (lua, "isConst", m.isConst);
 		insertString (lua, "name", m.name);
 		insertString (lua, "returnType", m.returnType);

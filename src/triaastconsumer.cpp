@@ -320,12 +320,29 @@ QString TriaASTConsumer::fileOfDecl (clang::Decl *decl) {
 	return this->m_pathCache.value (fileId);
 }
 
-bool TriaASTConsumer::hasRecordValueSemantics (const clang::CXXRecordDecl *record) {
+bool TriaASTConsumer::hasRecordPureVirtuals (const clang::CXXRecordDecl *record) {
+	for (auto it = record->method_begin (), end = record->method_end (); it != end; ++it) {
+		const clang::CXXMethodDecl *cur = *it;
+		if (cur->isVirtual () && cur->isPure ()) {
+			return true;
+		}
+		
+	}
+	
+	return false;
+}
+
+bool TriaASTConsumer::hasRecordValueSemantics (const clang::CXXRecordDecl *record, bool abstractTest) {
 	record = (!record || record->isThisDeclarationADefinition ()) ? record : record->getDefinition ();
 	
 	if (!record) {
 		// FIXME: This can break for typedef's
 		return true;
+	}
+	
+	// 
+	if (abstractTest && hasRecordPureVirtuals (record)) {
+		return false;
 	}
 	
 	// Search for the default- and copy-constructor, make sure they're not deleted
@@ -544,6 +561,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::FunctionDecl *de
 	def.loc = decl->getSourceRange ();
 	def.access = (decl->getAccess () == clang::AS_none) ? clang::AS_public : decl->getAccess ();
 	def.isVirtual = (method) ? method->isVirtual () : false;
+	def.isPure = (method) ? method->isPure () : false;
 	def.isConst = false;
 	def.annotations = annotationsFromDecl (decl);
 	
@@ -835,6 +853,7 @@ void TriaASTConsumer::processClass (clang::CXXRecordDecl *record) {
 			       record->hasUserDeclaredCopyConstructor ();
 	classDef.hasAssignmentOperator = record->hasCopyAssignmentWithConstParam () ||
 					 record->hasUserDeclaredCopyAssignment ();
+	classDef.hasPureVirtuals = hasRecordPureVirtuals (record);
 	
 	classDef.hasValueSemantics = classDef.hasDefaultCtor && classDef.hasCopyCtor &&
 				     classDef.hasAssignmentOperator && typeHasValueSemantics;
@@ -893,13 +912,14 @@ void TriaASTConsumer::processClass (clang::CXXRecordDecl *record) {
 	}
 	
 	// Done.
-	addDefaultConstructors (classDef);
+	addDefaultConstructors (record, classDef);
 	this->m_definitions->addClassDefinition (classDef);
 	
 }
 
-void TriaASTConsumer::addDefaultConstructors (ClassDef &classDef) {
-	if (!classDef.hasValueSemantics) {
+void TriaASTConsumer::addDefaultConstructors (clang::CXXRecordDecl *record, ClassDef &classDef) {
+	if (!hasRecordValueSemantics (record, false) || !classDef.hasDefaultCtor ||
+	    !classDef.hasCopyCtor || !classDef.hasAssignmentOperator) {
 		return;
 	}
 	

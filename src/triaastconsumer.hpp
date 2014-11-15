@@ -44,7 +44,7 @@ public:
 	void HandleTranslationUnit (clang::ASTContext &) override;
 	
 private:
-	void addDefaultConstructors (ClassDef &classDef);
+	void addDefaultConstructors (clang::CXXRecordDecl *record, ClassDef &classDef);
 	void addDefaultConstructor (ClassDef &classDef);
 	void addDefaultCopyConstructor (ClassDef &classDef);
 	void addConstructor (ClassDef &classDef, const Variables &arguments);
@@ -67,9 +67,10 @@ private:
 	QString typeName (const clang::QualType &type);
 	QString fileOfDecl (clang::Decl *decl);
 	
-	bool hasRecordValueSemantics(const clang::CXXRecordDecl *record);
-	bool hasTypeValueSemantics(const clang::QualType &type);
-	bool hasTypeValueSemantics(const clang::Type *type);
+	bool hasRecordPureVirtuals (const clang::CXXRecordDecl *record);
+	bool hasRecordValueSemantics (const clang::CXXRecordDecl *record, bool abstractTest = true);
+	bool hasTypeValueSemantics (const clang::QualType &type);
+	bool hasTypeValueSemantics (const clang::Type *type);
 	
 	bool shouldIntrospect (const Annotations &annotations, bool isGlobal, clang::CXXRecordDecl *record = nullptr);
 	void processClass (clang::CXXRecordDecl *record);

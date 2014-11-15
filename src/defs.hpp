@@ -79,6 +79,7 @@ struct MethodDef {
 	clang::AccessSpecifier access;
 	MethodType type;
 	bool isVirtual;
+	bool isPure;
 	bool isConst;
 	QString name;
 	QString returnType;
@@ -142,6 +143,7 @@ struct ClassDef {
 	bool hasAssignmentOperator = false;
 	bool implementsCtor = false;
 	bool implementsCopyCtor = false;
+	bool hasPureVirtuals = false;
 	
 };
 
