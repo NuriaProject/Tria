@@ -521,14 +521,22 @@ function defaultConstruct(type, isPod, isCtor)
 	return type .. ' ();'
 end
 
+function shouldSkipMethod(class, method)
+	return class.hasPureVirtuals and method.type == 'constructor'
+end
+
 function methodUnsafeCallback(class, method)
+	if shouldSkipMethod(class, method) then
+		return 'return Nuria::Callback (); // Not constructable'
+	end
 	return 'return ' .. methodToCallback(class, method)
 end
 
 function methodCallback(class, method)
 	local check = requireAnnotation (method)
 	
-	if not check then -- Shortcut for methods without NURIA_REQUIRE annotation
+	-- Shortcut for methods without NURIA_REQUIRE annotation
+	if not check or shouldSkipMethod(class, method) then
 		return 'return _methodUnsafeCallback (__instance, index);'
 	end
 	
@@ -550,7 +558,7 @@ end
 
 function methodArgumentTest(class, method)
 	local check = requireAnnotation (method)
-	if not check then
+	if not check or shouldSkipMethod(class, method) then
 		return 'return Nuria::Callback (&returnTrue);'
 	end
 	
