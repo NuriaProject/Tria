@@ -24,6 +24,7 @@
 #include <QStringList>
 
 #include "definitions.hpp"
+#undef bool
 
 namespace clang {
 class CXXConversionDecl;
@@ -60,6 +61,7 @@ private:
 	void reportMessage (clang::DiagnosticsEngine::Level level, clang::SourceLocation loc,
 			    const QByteArray &info);
 	
+	bool isRecordATemplate(const clang::CXXRecordDecl *record);
 	void declareType (const clang::QualType &type);
 	
 	QString typeDeclName (const clang::NamedDecl *decl, const clang::Type *type);

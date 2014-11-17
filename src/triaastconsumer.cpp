@@ -29,6 +29,7 @@
 
 #include "definitions.hpp"
 #include "defs.hpp"
+#undef bool
 
 static const QString introspectAnnotation = QStringLiteral ("nuria_introspect");
 static const QString customAnnotation = QStringLiteral ("nuria_annotate:");
@@ -341,7 +342,7 @@ bool TriaASTConsumer::hasRecordValueSemantics (const clang::CXXRecordDecl *recor
 	}
 	
 	// 
-	if (abstractTest && hasRecordPureVirtuals (record)) {
+	if ((abstractTest && hasRecordPureVirtuals (record)) || isRecordATemplate (record)) {
 		return false;
 	}
 	
@@ -387,11 +388,10 @@ bool TriaASTConsumer::hasRecordValueSemantics (const clang::CXXRecordDecl *recor
 
 bool TriaASTConsumer::hasTypeValueSemantics (const clang::Type *type) {
 	if (type->isPointerType ()) {
-		return true;
+		return !isRecordATemplate (type->getPointeeCXXRecordDecl ());
 	}
 	
 	return hasRecordValueSemantics (type->getAsCXXRecordDecl ());
-	
 }
 
 bool TriaASTConsumer::hasTypeValueSemantics (const clang::QualType &type) {
@@ -513,7 +513,7 @@ bool TriaASTConsumer::registerReadWriteMethod (ClassDef &classDef, MethodDef &de
 	if (canWrite) {
 		if (field.type != def.arguments.at (0).type) {
 			reportError (decl->getLocation (),
-				     "The type of teh first argument of a NURIA_WRITE "
+				     "The type of the first argument of a NURIA_WRITE "
 				     "method must be the same type as the field.");
 			return false;
 		} else if (!field.setter.isEmpty ()) {
@@ -716,7 +716,8 @@ void TriaASTConsumer::processEnum (ClassDef &classDef, clang::EnumDecl *decl, bo
 	Annotations annotations = annotationsFromDecl (decl);
 	
 	if ((access != clang::AS_public && access != clang::AS_none) ||
-	    !shouldIntrospect (annotations, isGlobal)) {
+	    !shouldIntrospect (annotations, isGlobal) ||
+	    isRecordATemplate (llvm::dyn_cast< clang::CXXRecordDecl > (decl->getParent ()))) { // TODO: Fix enums in templates
 		return;
 	}
 	
@@ -738,10 +739,11 @@ void TriaASTConsumer::processEnum (ClassDef &classDef, clang::EnumDecl *decl, bo
 	
 	// Store and declare
 	classDef.enums.append (def);
-	this->m_definitions->declareType (classDef.name + QStringLiteral ("::") + def.name);
+	declareType (clang::QualType (decl->getTypeForDecl (), 0));
+//	this->m_definitions->declareType (classDef.name + QStringLiteral ("::") + def.name);
 	
 }
-
+#include <qmetatype.h>
 void TriaASTConsumer::processConversion (ClassDef &classDef, clang::CXXConversionDecl *convDecl) {
 	if (!hasTypeValueSemantics (convDecl->getConversionType ())) {
 		return;
@@ -770,7 +772,7 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	
 	if (record) {
 		processClass (record);
-	} else if (enumDecl) {
+	} else if (enumDecl && !this->m_globals.name.isEmpty ()) {
 		processEnum (this->m_globals, enumDecl, true);
 	}
 	
@@ -800,14 +802,21 @@ void TriaASTConsumer::HandleTranslationUnit (clang::ASTContext &) {
 	
 }
 
-void TriaASTConsumer::processClass (clang::CXXRecordDecl *record) {
-	static const llvm::StringRef qMetaTypeIdName ("QMetaTypeId");
+bool TriaASTConsumer::isRecordATemplate (const clang::CXXRecordDecl *record) {
+	while (record) {
+		if (record->getDescribedClassTemplate () != nullptr) {
+			return true;
+		}
+		
+		record = clang::dyn_cast< const clang::CXXRecordDecl > (record->getParent ());
+	}
 	
 	// 
-	bool typeHasValueSemantics = hasTypeValueSemantics (record->getTypeForDecl ());
-	if (!typeHasValueSemantics) {
-		this->m_definitions->avoidType (typeName (record->getTypeForDecl ()));
-	}
+	return false;
+}
+
+void TriaASTConsumer::processClass (clang::CXXRecordDecl *record) {
+	static const llvm::StringRef qMetaTypeIdName ("QMetaTypeId");
 	
 	// Check if this is a QMetaTypeId specialization (Result of a Q_DECLARE_METATYPE)
 	clang::ClassTemplateSpecializationDecl *templ = llvm::dyn_cast< clang::ClassTemplateSpecializationDecl > (record);
@@ -819,6 +828,17 @@ void TriaASTConsumer::processClass (clang::CXXRecordDecl *record) {
 			this->m_definitions->addDeclaredType (name);
 		}
 		
+		return;
+	}
+	
+	// 
+	bool typeHasValueSemantics = hasTypeValueSemantics (record->getTypeForDecl ());
+	if (!typeHasValueSemantics) {
+		this->m_definitions->avoidType (typeName (record->getTypeForDecl ()));
+	}
+	
+	// Skip templates
+	if (isRecordATemplate (record)) {
 		return;
 	}
 	
@@ -986,22 +1006,18 @@ void TriaASTConsumer::reportMessage (clang::DiagnosticsEngine::Level level, clan
 }
 
 void TriaASTConsumer::declareType (const clang::QualType &type) {
-	if (type.getTypePtr ()->isVoidType ()) {
+	const clang::Type *ptr = type.getTypePtr ();
+	clang::CXXRecordDecl *decl = ptr->getAsCXXRecordDecl ();
+	
+	if (ptr->isVoidType () || type.isPODType (*this->m_context) || ptr->isTemplateTypeParmType () ||
+	    (decl && decl->isAnonymousStructOrUnion ()) || !hasTypeValueSemantics (type)) {
 		return;
 	}
 	
-	// 
-	if (!hasTypeValueSemantics (type)) {
-		return;
-	}
-	
-	// Ignore if it's either a POD-type (Which is already registered) or if
-	// it begins with "Q" (indicating it's a Qt type) and is known to the
-	// meta-system of this running tria instance.
+	// Ignore if it is known to the meta-system of this running tria instance.
 	QString name = typeName (type);
 	QString desugared = typeName (type.getDesugaredType (*this->m_context));
-	if ((type.isPODType (*this->m_context) || name.startsWith (QLatin1Char ('Q')))
-	    && QMetaType::type (qPrintable(name)) != 0) {
+	if (QMetaType::type (qPrintable(name)) != QMetaType::UnknownType) {
 		return;
 	}
 	
