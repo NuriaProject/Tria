@@ -141,7 +141,7 @@ function writeDeclareMetatype(name)
 	end
 	
 	table.insert (definitions.declaredTypes, name)
-	write ("Q_DECLARE_METATYPE(" .. name .. ")\n")
+	write ("Q_DECLARE_METATYPE_IMPL(FWD(" .. name .. "))\n")
 end
 
 function escapeName(name)
@@ -877,7 +877,8 @@ end
 
 writeHeader ()
 for k, v in ipairs(tria.sourceFiles) do writeInclude (v) end
-write ("\n")
+write ("\n" ..
+       "#define FWD(...) __VA_ARGS__\n")
 
 -- Q_DECLARE_METATYPEs
 for k,v in pairs(definitions.classes) do writeClassDeclareMetatype (v) end
@@ -885,6 +886,7 @@ for k,v in ipairs(definitions.declareTypes) do writeDeclareMetatype (v) end
 
 -- 
 write ("\n" ..
+       "#undef FWD\n" ..
        "#define RESULT(Type) *reinterpret_cast< Type * > (result)\n" ..
        "namespace TriaObjectData {\n\n")
 
@@ -903,4 +905,5 @@ for k,v in pairs (definitions.classes) do writeClassDef (k, v) end
 writeInstantiatorClass ();
 
 -- Close namespace
-write ("}\n")
+write ("}\n\n" ..
+       "#undef RESULT\n")
