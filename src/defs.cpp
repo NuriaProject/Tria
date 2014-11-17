@@ -71,7 +71,7 @@ QDebug operator<< (QDebug dbg, const MethodDef &method) {
 	dumpAnnotations (dbg, method.annotations);
 	
 	dbg.nospace () << accessStr[method.access] << " "
-		       << qPrintable(method.returnType) << " "
+		       << qPrintable(method.returnType.type) << " "
 		       << qPrintable(method.name);
 	
 	dbg.nospace () << "(";

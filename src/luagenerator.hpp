@@ -61,6 +61,7 @@ private:
 	void exportBases (lua_State *lua, const Bases &bases);
 	void exportAnnotations (lua_State *lua, const Annotations &annotations);
 	void exportVariables (lua_State *lua, const char *name, const Variables &variables);
+	void pushVariable (lua_State *lua, const VariableDef &variable);
 	void exportMethods (lua_State *lua, const Methods &methods);
 	void exportEnums (lua_State *lua, const Enums &enums);
 	void exportEnumValues (lua_State *lua, const QMap< QString, int > &elements);

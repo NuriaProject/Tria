@@ -486,7 +486,7 @@ bool TriaASTConsumer::registerReadWriteMethod (ClassDef &classDef, MethodDef &de
 		VariableDef field;
 		field.name = fieldName;
 		field.access = clang::AS_public;
-		field.type = canRead ? def.returnType : def.arguments.at (0).type;
+		field.type = canRead ? def.returnType.type : def.arguments.at (0).type;
 		
 		classDef.variables.append (field);
 		fieldPos = classDef.variables.length () - 1;
@@ -499,7 +499,7 @@ bool TriaASTConsumer::registerReadWriteMethod (ClassDef &classDef, MethodDef &de
 	// Type and multiple-methods checks
 	if (canRead) {
 		
-		if (field.type != def.returnType) {
+		if (field.type != def.returnType.type) {
 			reportError (decl->getLocation (),
 				     "A NURIA_READ method must return the same type as the field.");
 			return false;
@@ -519,7 +519,7 @@ bool TriaASTConsumer::registerReadWriteMethod (ClassDef &classDef, MethodDef &de
 		} else if (!field.setter.isEmpty ()) {
 			reportWarning (decl->getLocation (),
 				       "Multiple registered NURIA_WRITE methods for this field.");
-		} else if (def.returnType != "void" && def.returnType != "_Bool") {
+		} else if (def.returnType.type != "void" && def.returnType.type != "_Bool") {
 			reportWarning (decl->getLocation (),
 				       "A NURIA_WRITE method should return void or bool.");
 		}
@@ -532,7 +532,7 @@ bool TriaASTConsumer::registerReadWriteMethod (ClassDef &classDef, MethodDef &de
 	} else {
 		field.setter = def.name;
 		field.setterArgName = def.arguments.at (0).name;
-		field.setterReturnsBool = (def.returnType == "_Bool");
+		field.setterReturnsBool = (def.returnType.type == "_Bool");
 	}
 	
 	return true;
@@ -544,6 +544,13 @@ static inline clang::QualType getMethodResultType (clang::FunctionDecl *decl) {
 #else
 	return decl->getResultType ();
 #endif
+}
+
+void TriaASTConsumer::fillVariableDef (VariableDef &def, const clang::QualType &type) {
+	def.type = typeName (type);
+	def.isReference = type.getTypePtr ()->isReferenceType ();
+	def.isConst = type.isConstant (*this->m_context);
+	def.isPodType = type.isPODType (*this->m_context);
 }
 
 void TriaASTConsumer::processMethod (ClassDef &classDef, clang::FunctionDecl *decl, bool isGlobal) {
@@ -579,7 +586,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::FunctionDecl *de
 	    !resultTypeHasValueSemantics || containsAnnotation (def.annotations, skipAnnotation)) {
 		
 		if (!resultTypeHasValueSemantics) {
-			this->m_definitions->avoidType (def.returnType);
+			this->m_definitions->avoidType (def.returnType.type);
 		}
 		
 		return;
@@ -588,20 +595,22 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::FunctionDecl *de
 	// C'tors and D'tors don't have names nor do they really return anything
 	if (ctor) {
 		def.type = ConstructorMethod;
-		def.returnType = classDef.name;
+		def.returnType.loc = def.loc;
+		def.returnType.type = classDef.name;
 	} else if (dtor || convDecl || !decl->getDeclName ().isIdentifier ()) {
 		// Ignore.
 		return;
 	} else {
 		clang::QualType resultType = getMethodResultType (decl);
 		def.name = llvmToString (decl->getName ());
-		def.returnType = typeName (resultType);
+		
+		def.returnType.loc = def.loc;
+		fillVariableDef (def.returnType, resultType);
 		def.type = (!method) ? StaticMethod : (method->isStatic () ? StaticMethod : MemberMethod);
-		def.returnTypeIsPod = resultType.isPODType (*this->m_context);
 		
 		// Ignore method if the result is a const pointer.
 		if (resultType.getTypePtr ()->isPointerType () &&
-		    resultType.getTypePtr ()->getAs< clang::PointerType > ()->getPointeeType ().isConstQualified ()) {
+		    resultType.getTypePtr ()->getPointeeType ().isConstQualified ()) {
 			return;
 		}
 		
@@ -617,13 +626,10 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::FunctionDecl *de
 		const clang::ParmVarDecl *param = decl->getParamDecl (i);
 		VariableDef var;
 		
-		var.access = clang::AS_public;
+		var.loc = param->getSourceRange ();
 		var.name = llvmToString (param->getName ());
-		var.type = typeName (param->getType ());
 		var.isOptional = param->hasDefaultArg ();
-		var.isReference = param->getType ().getTypePtr ()->isReferenceType ();
-		var.isConst = param->getType ().isConstant (*this->m_context);
-		var.isPodType = param->getType ().isPODType (*this->m_context);
+		fillVariableDef (var, param->getType ());
 		def.hasOptionalArguments = var.isOptional;
 		
 		// Invent a name for unnamed arguments
@@ -664,7 +670,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::FunctionDecl *de
 		conv.fromType = (def.type == MemberMethod)
 				? classDef.name : def.arguments.first ().type;
 		conv.toType = (def.type == ConstructorMethod)
-			      ? classDef.name : def.returnType;
+			      ? classDef.name : def.returnType.type;
 		conv.isConst = def.isConst && (def.type == MemberMethod || def.arguments.first ().isConst);
 		conv.loc = def.loc;
 		
@@ -975,7 +981,8 @@ void TriaASTConsumer::addConstructor (ClassDef &classDef, const Variables &argum
 	def.type = ConstructorMethod;
 	def.isVirtual = false;
 	def.isConst = false;
-	def.returnType = classDef.name;
+	def.returnType.loc = classDef.loc;
+	def.returnType.type = classDef.name;
 	def.arguments = arguments;
 	
 	classDef.methods.prepend (def);

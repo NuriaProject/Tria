@@ -78,6 +78,7 @@ private:
 	void processClass (clang::CXXRecordDecl *record);
 	BaseDef processBase (clang::CXXBaseSpecifier *specifier);
 	bool registerReadWriteMethod (ClassDef &classDef, MethodDef &def, clang::CXXMethodDecl *decl);
+	void fillVariableDef (VariableDef &def, const clang::QualType &type);
 	void processMethod (ClassDef &classDef, clang::FunctionDecl *decl, bool isGlobal = false);
 	VariableDef processVariable (clang::FieldDecl *decl);
 	void processEnum (ClassDef &classDef, clang::EnumDecl *decl, bool isGlobal = false);

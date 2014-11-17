@@ -637,29 +637,7 @@ void LuaGenerator::exportVariables (lua_State *lua, const char *name, const Vari
 	
 	lua_createtable (lua, variables.length (), 0);
 	for (int i = 0; i < variables.length (); i++) {
-		const VariableDef &var = variables.at (i);
-		lua_createtable (lua, 0, 13);
-		
-		// 
-		lua_pushstring (lua, var.name.toLatin1 ().constData ());
-		lua_setfield (lua, -2, "name");
-		
-		pushAccessSpecifier (lua, var.access);
-		lua_setfield (lua, -2, "access");
-		
-		insertSourceRange (lua, "loc", var.loc);
-		insertString (lua, "type", var.type);
-		insertString (lua, "getter", var.getter);
-		insertString (lua, "setterArgName", var.setterArgName);
-		insertString (lua, "setter", var.setter);
-		exportAnnotations (lua, var.annotations);
-		insertBool (lua, "isConst", var.isConst);
-		insertBool (lua, "isReference", var.isReference);
-		insertBool (lua, "isPodType", var.isPodType);
-		insertBool (lua, "isOptional", var.isOptional);
-		insertBool (lua, "setterReturnsBool", var.setterReturnsBool);
-		
-		// 
+		pushVariable (lua, variables.at (i));
 		lua_rawseti (lua, -2, i + 1);
 	}
 	
@@ -667,11 +645,35 @@ void LuaGenerator::exportVariables (lua_State *lua, const char *name, const Vari
 	lua_setfield (lua, -2, name);
 }
 
+void LuaGenerator::pushVariable (lua_State *lua, const VariableDef &variable) {
+	lua_createtable (lua, 0, 13);
+	
+	// 
+	lua_pushstring (lua, variable.name.toLatin1 ().constData ());
+	lua_setfield (lua, -2, "name");
+	
+	pushAccessSpecifier (lua, variable.access);
+	lua_setfield (lua, -2, "access");
+	
+	insertSourceRange (lua, "loc", variable.loc);
+	insertString (lua, "type", variable.type);
+	insertString (lua, "getter", variable.getter);
+	insertString (lua, "setterArgName", variable.setterArgName);
+	insertString (lua, "setter", variable.setter);
+	exportAnnotations (lua, variable.annotations);
+	insertBool (lua, "isConst", variable.isConst);
+	insertBool (lua, "isReference", variable.isReference);
+	insertBool (lua, "isPodType", variable.isPodType);
+	insertBool (lua, "isOptional", variable.isOptional);
+	insertBool (lua, "setterReturnsBool", variable.setterReturnsBool);
+	
+}
+
 void LuaGenerator::exportMethods (lua_State *lua, const Methods &methods) {
 	lua_createtable (lua, methods.length (), 0);
 	for (int i = 0; i < methods.length (); i++) {
 		const MethodDef &m = methods.at (i);
-		lua_createtable (lua, 0, 12);
+		lua_createtable (lua, 0, 11);
 		
 		// 
 		pushAccessSpecifier (lua, m.access);
@@ -680,15 +682,16 @@ void LuaGenerator::exportMethods (lua_State *lua, const Methods &methods) {
 		pushMethodType (lua, m.type);
 		lua_setfield (lua, -2, "type");
 		
+		pushVariable (lua, m.returnType);
+		lua_setfield (lua, -2, "returnType");
+		
 		insertBool (lua, "isVirtual", m.isVirtual);
 		insertBool (lua, "isPure", m.isPure);
 		insertBool (lua, "isConst", m.isConst);
 		insertString (lua, "name", m.name);
-		insertString (lua, "returnType", m.returnType);
 		exportVariables (lua, "arguments", m.arguments);
 		exportAnnotations (lua, m.annotations);
 		insertBool (lua, "hasOptionalArguments", m.hasOptionalArguments);
-		insertBool (lua, "returnTypeIsPod", m.returnTypeIsPod);
 		insertSourceRange (lua, "loc", m.loc);
 		
 		// 

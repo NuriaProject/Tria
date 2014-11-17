@@ -151,7 +151,7 @@ static void filterMethods (const StringSet &avoid, Methods &methods) {
 	for (int i = 0; i < methods.length (); i++) {
 		const MethodDef &cur = methods.at (i);
 		
-		if ((!cur.name.isEmpty () && avoid.contains (cur.returnType)) ||
+		if ((!cur.name.isEmpty () && avoid.contains (cur.returnType.type)) ||
 		    checkArgumentsForAvoidedTypes (avoid, cur.arguments)) {
 			methods.remove (i);
 			i--;

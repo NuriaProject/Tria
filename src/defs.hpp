@@ -54,7 +54,7 @@ typedef QVector< AnnotationDef > Annotations;
 
 struct VariableDef {
 	clang::SourceRange loc;
-	clang::AccessSpecifier access;
+	clang::AccessSpecifier access = clang::AS_public;
 	
 	QString name;
 	QString type;
@@ -82,11 +82,10 @@ struct MethodDef {
 	bool isPure;
 	bool isConst;
 	QString name;
-	QString returnType;
+	VariableDef returnType;
 	Variables arguments;
 	Annotations annotations;
 	bool hasOptionalArguments = false;
-	bool returnTypeIsPod = false;
 	
 };
 
