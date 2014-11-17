@@ -1007,9 +1007,16 @@ void TriaASTConsumer::reportMessage (clang::DiagnosticsEngine::Level level, clan
 
 void TriaASTConsumer::declareType (const clang::QualType &type) {
 	const clang::Type *ptr = type.getTypePtr ();
-	clang::CXXRecordDecl *decl = ptr->getAsCXXRecordDecl ();
+	const clang::Type *pointee = ptr;
+	const clang::CXXRecordDecl *decl = ptr->getAsCXXRecordDecl ();
 	
-	if (ptr->isVoidType () || type.isPODType (*this->m_context) || ptr->isTemplateTypeParmType () ||
+	if (ptr->isPointerType ()) {
+		pointee = ptr->getPointeeType ().getTypePtr ();
+		decl = ptr->getPointeeCXXRecordDecl ();
+	}
+	
+	if (ptr->isVoidType () || type.isPODType (*this->m_context) ||
+	    ptr->isTemplateTypeParmType () || pointee->isTemplateTypeParmType () ||
 	    (decl && decl->isAnonymousStructOrUnion ()) || !hasTypeValueSemantics (type)) {
 		return;
 	}
@@ -1017,7 +1024,9 @@ void TriaASTConsumer::declareType (const clang::QualType &type) {
 	// Ignore if it is known to the meta-system of this running tria instance.
 	QString name = typeName (type);
 	QString desugared = typeName (type.getDesugaredType (*this->m_context));
-	if (QMetaType::type (qPrintable(name)) != QMetaType::UnknownType) {
+	int metaId = QMetaType::type (qPrintable(name));
+	
+	if (metaId != QMetaType::UnknownType && metaId < QMetaType::User) {
 		return;
 	}
 	
