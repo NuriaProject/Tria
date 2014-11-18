@@ -1022,8 +1022,8 @@ void TriaASTConsumer::declareType (const clang::QualType &type) {
 		decl = ptr->getPointeeCXXRecordDecl ();
 	}
 	
-	if (ptr->isVoidType () || type.isPODType (*this->m_context) ||
-	    ptr->isTemplateTypeParmType () || pointee->isTemplateTypeParmType () ||
+	if ((type.isPODType (*this->m_context) && !ptr->isEnumeralType () && !ptr->isPointerType ()) ||
+	    ptr->isVoidType () || ptr->isTemplateTypeParmType () || pointee->isTemplateTypeParmType () ||
 	    (decl && decl->isAnonymousStructOrUnion ()) || !hasTypeValueSemantics (type)) {
 		return;
 	}
