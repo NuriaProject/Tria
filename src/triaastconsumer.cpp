@@ -222,7 +222,7 @@ static inline QString llvmToString (const llvm::StringRef &str) {
 	return QString::fromLatin1 (str.data (), str.size ());
 }
 
-QString TriaASTConsumer::typeDeclName (const clang::NamedDecl *decl, const clang::Type *type) {
+QString TriaASTConsumer::typeDeclName (const clang::NamedDecl *decl) {
 	const clang::ClassTemplateSpecializationDecl *templ =
 			llvm::dyn_cast< clang::ClassTemplateSpecializationDecl > (decl);
 	QString name = QString::fromStdString (decl->getQualifiedNameAsString ());
@@ -262,11 +262,11 @@ QString TriaASTConsumer::typeName (const clang::Type *type) {
 	const clang::TypedefType *typeDef = type->getAs< clang::TypedefType > ();
 	
 	if (typeDef) {
-		return typeDeclName (typeDef->getDecl ()->getCanonicalDecl (), type);
+		return typeDeclName (typeDef->getDecl ()->getCanonicalDecl ());
 	}
 	
 	if (decl) {
-		return typeDeclName (decl, type);
+		return typeDeclName (decl);
 	}
 	
 	if (type->isReferenceType ()) {
@@ -321,18 +321,6 @@ QString TriaASTConsumer::fileOfDecl (clang::Decl *decl) {
 	return this->m_pathCache.value (fileId);
 }
 
-bool TriaASTConsumer::hasRecordPureVirtuals (const clang::CXXRecordDecl *record) {
-	for (auto it = record->method_begin (), end = record->method_end (); it != end; ++it) {
-		const clang::CXXMethodDecl *cur = *it;
-		if (cur->isVirtual () && cur->isPure ()) {
-			return true;
-		}
-		
-	}
-	
-	return false;
-}
-
 bool TriaASTConsumer::hasRecordValueSemantics (const clang::CXXRecordDecl *record, bool abstractTest) {
 	record = (!record || record->isThisDeclarationADefinition ()) ? record : record->getDefinition ();
 	
@@ -342,7 +330,7 @@ bool TriaASTConsumer::hasRecordValueSemantics (const clang::CXXRecordDecl *recor
 	}
 	
 	// 
-	if ((abstractTest && hasRecordPureVirtuals (record)) || isRecordATemplate (record)) {
+	if ((abstractTest && record->isAbstract ()) || isDeclATemplate (record)) {
 		return false;
 	}
 	
@@ -388,7 +376,7 @@ bool TriaASTConsumer::hasRecordValueSemantics (const clang::CXXRecordDecl *recor
 
 bool TriaASTConsumer::hasTypeValueSemantics (const clang::Type *type) {
 	if (type->isPointerType ()) {
-		return !isRecordATemplate (type->getPointeeCXXRecordDecl ());
+		return !isDeclATemplate (type->getPointeeCXXRecordDecl ());
 	}
 	
 	return hasRecordValueSemantics (type->getAsCXXRecordDecl ());
@@ -547,10 +535,20 @@ static inline clang::QualType getMethodResultType (clang::FunctionDecl *decl) {
 }
 
 void TriaASTConsumer::fillVariableDef (VariableDef &def, const clang::QualType &type) {
+	clang::QualType pointee = type.getTypePtr ()->getPointeeType ();
+	if (!pointee.isNull ()) {
+		def.isConst = pointee.isConstant (*this->m_context) || pointee.isConstQualified () ||
+		              (pointee.getQualifiers ().getCVRQualifiers () & clang::Qualifiers::Const);
+	}
+	
+	// 
 	def.type = typeName (type);
 	def.isReference = type.getTypePtr ()->isReferenceType ();
-	def.isConst = type.isConstant (*this->m_context);
+	def.isConst |= type.isConstant (*this->m_context) || type.isConstQualified () ||
+	               (type.getQualifiers ().getCVRQualifiers () & clang::Qualifiers::Const);
+	
 	def.isPodType = type.isPODType (*this->m_context);
+	
 }
 
 void TriaASTConsumer::processMethod (ClassDef &classDef, clang::FunctionDecl *decl, bool isGlobal) {
@@ -630,6 +628,7 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::FunctionDecl *de
 		var.name = llvmToString (param->getName ());
 		var.isOptional = param->hasDefaultArg ();
 		fillVariableDef (var, param->getType ());
+		
 		def.hasOptionalArguments = var.isOptional;
 		
 		// Invent a name for unnamed arguments
@@ -637,8 +636,11 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::FunctionDecl *de
 			var.name = QStringLiteral ("__nuria_arg") + QString::number (i);
 		}
 		
-		// Ignore methods with arguments without value-semantics
-		if (!hasTypeValueSemantics (param->getType ())) {
+		// Ignore methods with arguments without value-semantics.
+		// Also ignore if the type is private (i.e. QPrivateSignal)
+		clang::CXXRecordDecl *typeRec = param->getType ().getTypePtr ()->getAsCXXRecordDecl ();
+		if (!hasTypeValueSemantics (param->getType ()) ||
+		    (typeRec && typeRec->getAccess () != clang::AS_public)) {
 			this->m_definitions->avoidType (var.type);
 			return;
 		}
@@ -723,7 +725,7 @@ void TriaASTConsumer::processEnum (ClassDef &classDef, clang::EnumDecl *decl, bo
 	
 	if ((access != clang::AS_public && access != clang::AS_none) ||
 	    !shouldIntrospect (annotations, isGlobal) ||
-	    isRecordATemplate (llvm::dyn_cast< clang::CXXRecordDecl > (decl->getParent ()))) { // TODO: Fix enums in templates
+	    isDeclATemplate (decl->getParent ())) {
 		return;
 	}
 	
@@ -776,6 +778,11 @@ void TriaASTConsumer::HandleTagDeclDefinition (clang::TagDecl *decl) {
 	clang::CXXRecordDecl *record = llvm::dyn_cast< clang::CXXRecordDecl > (decl);
 	clang::EnumDecl *enumDecl = llvm::dyn_cast< clang::EnumDecl > (decl);
 	
+	if (isDeclUnnamed (decl)) {
+		return;
+	}
+	
+	// 
 	if (record) {
 		processClass (record);
 	} else if (enumDecl && !this->m_globals.name.isEmpty ()) {
@@ -808,16 +815,29 @@ void TriaASTConsumer::HandleTranslationUnit (clang::ASTContext &) {
 	
 }
 
-bool TriaASTConsumer::isRecordATemplate (const clang::CXXRecordDecl *record) {
-	while (record) {
-		if (record->getDescribedClassTemplate () != nullptr) {
+bool TriaASTConsumer::isDeclATemplate (const clang::DeclContext *decl) {
+	while (decl) {
+		const clang::CXXRecordDecl *record = clang::dyn_cast< const clang::CXXRecordDecl > (decl);
+		if (record && record->getDescribedClassTemplate () != nullptr) {
 			return true;
 		}
 		
-		record = clang::dyn_cast< const clang::CXXRecordDecl > (record->getParent ());
+		decl = decl->getParent ();
 	}
 	
-	// 
+	return false;
+}
+
+bool TriaASTConsumer::isDeclUnnamed (const clang::DeclContext *decl) {
+	while (decl) {
+		const clang::NamedDecl *named = clang::dyn_cast< const clang::NamedDecl > (decl);
+		if (named && named->getDeclName ().isIdentifier () && named->getName ().empty ()) {
+			return true;
+		}
+		
+		decl = decl->getParent ();
+	}
+	
 	return false;
 }
 
@@ -844,7 +864,7 @@ void TriaASTConsumer::processClass (clang::CXXRecordDecl *record) {
 	}
 	
 	// Skip templates
-	if (isRecordATemplate (record)) {
+	if (isDeclATemplate (record)) {
 		return;
 	}
 	
@@ -852,7 +872,7 @@ void TriaASTConsumer::processClass (clang::CXXRecordDecl *record) {
 	ClassDef classDef;
 	classDef.loc = record->getSourceRange ();
 	classDef.access = record->getAccess ();
-	classDef.name = QString::fromStdString (record->getQualifiedNameAsString ());
+	classDef.name = typeDeclName (record); // QString::fromStdString (record->getQualifiedNameAsString ());
 	classDef.file = fileOfDecl (record);
 	classDef.annotations = annotationsFromDecl (record);
 	
@@ -879,7 +899,7 @@ void TriaASTConsumer::processClass (clang::CXXRecordDecl *record) {
 			       record->hasUserDeclaredCopyConstructor ();
 	classDef.hasAssignmentOperator = record->hasCopyAssignmentWithConstParam () ||
 					 record->hasUserDeclaredCopyAssignment ();
-	classDef.hasPureVirtuals = hasRecordPureVirtuals (record);
+	classDef.hasPureVirtuals = record->isAbstract ();
 	
 	classDef.hasValueSemantics = classDef.hasDefaultCtor && classDef.hasCopyCtor &&
 				     classDef.hasAssignmentOperator && typeHasValueSemantics;
@@ -931,7 +951,7 @@ void TriaASTConsumer::processClass (clang::CXXRecordDecl *record) {
 	for (auto it = record->decls_begin (); it != record->decls_end (); ++it) {
 		clang::EnumDecl *enumDecl = llvm::dyn_cast< clang::EnumDecl > (*it);
 		
-		if (enumDecl) {
+		if (enumDecl && !isDeclUnnamed (enumDecl)) {
 			processEnum (classDef, enumDecl);
 		}
 		
@@ -1024,7 +1044,7 @@ void TriaASTConsumer::declareType (const clang::QualType &type) {
 	
 	if ((type.isPODType (*this->m_context) && !ptr->isEnumeralType () && !ptr->isPointerType ()) ||
 	    ptr->isVoidType () || ptr->isTemplateTypeParmType () || pointee->isTemplateTypeParmType () ||
-	    (decl && decl->isAnonymousStructOrUnion ()) || !hasTypeValueSemantics (type)) {
+	    isDeclUnnamed (decl) || !hasTypeValueSemantics (type)) {
 		return;
 	}
 	

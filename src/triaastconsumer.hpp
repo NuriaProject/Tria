@@ -61,15 +61,15 @@ private:
 	void reportMessage (clang::DiagnosticsEngine::Level level, clang::SourceLocation loc,
 			    const QByteArray &info);
 	
-	bool isRecordATemplate(const clang::CXXRecordDecl *record);
+	bool isDeclATemplate (const clang::DeclContext *decl);
+	bool isDeclUnnamed (const clang::DeclContext *decl);
 	void declareType (const clang::QualType &type);
 	
-	QString typeDeclName (const clang::NamedDecl *decl, const clang::Type *type);
+	QString typeDeclName (const clang::NamedDecl *decl);
 	QString typeName (const clang::Type *type);
 	QString typeName (const clang::QualType &type);
 	QString fileOfDecl (clang::Decl *decl);
 	
-	bool hasRecordPureVirtuals (const clang::CXXRecordDecl *record);
 	bool hasRecordValueSemantics (const clang::CXXRecordDecl *record, bool abstractTest = true);
 	bool hasTypeValueSemantics (const clang::QualType &type);
 	bool hasTypeValueSemantics (const clang::Type *type);
