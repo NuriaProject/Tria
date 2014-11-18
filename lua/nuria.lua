@@ -411,18 +411,23 @@ function methodInvoke(class, method, args, typeName)
 	
 end
 
+function qualifiedType(type)
+	local pre = type.isConst and 'const ' or ''
+	local suf = type.isReference and '&' or ''
+	return pre .. type.type .. suf
+end
+
 function functionPointerType(class, method)
 	local prefix = method.type == 'member' and class.name .. '::' or ''
 	local suffix = method.isConst and 'const' or ''
 	local args = { }
 	
 	for k, v in ipairs (method.arguments) do
-		local pre = v.isConst and 'const ' or ''
-		local suf = v.isReference and '&' or ''
-		table.insert (args, pre .. v.type .. suf)
+		table.insert (args, qualifiedType (v))
 	end
 	
-	return method.returnType .. '(' .. prefix .. '*)(' .. table.concat (args, ',') .. ')' .. suffix
+	local result = qualifiedType (method.returnType)
+	return result .. '(' .. prefix .. '*)(' .. table.concat (args, ',') .. ')' .. suffix
 	
 end
 
@@ -516,9 +521,9 @@ end
 function defaultConstruct(type, isPod, isCtor)
 	if type == 'void' then return '' end
 	if isPod then return '0;' end
-	if isCtor then return '(' .. type .. ' *)nullptr;' end
+	if isCtor then return '(' .. type.type .. ' *)nullptr;' end
 	
-	return type .. ' ();'
+	return type.type .. ' ();'
 end
 
 function shouldSkipMethod(class, method)
@@ -543,7 +548,7 @@ function methodCallback(class, method)
 	-- 
 	local fail = defaultConstruct (method.returnType, method.returnTypeIsPod, method.type == 'constructor')
 	local call = methodInvoke(class, method)
-	if method.returnType ~= 'void' then
+	if method.returnType.type ~= 'void' then
 		call = 'return QVariant::fromValue (' .. call .. ');'
 		fail = 'return QVariant ();'
 	else
@@ -738,7 +743,7 @@ function writeClassDef(name, class)
 	local Key = function(k) return k end
 	local Name = function(k, v) return v.name end
 	local MethodType = function(v) return methodTypeToCppName(v.type) end
-	local MethodReturnType = function(v) return qByteArray(v.returnType) end
+	local MethodReturnType = function(v) return qByteArray(v.returnType.type) end
 	local FieldType = function(k, v) return 'return ' .. qByteArray(v.type) .. ';' end
 	local EnumElemCount = function(v) return 'return ' .. table.length (v.elements) .. ';' end
 	

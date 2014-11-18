@@ -45,7 +45,7 @@ function functionsToJson(methods, type)
 		table.insert (r, {
 			name = v.name,
 			annotations = annotationsToJson (v.annotations),
-			resultType = v.returnType,
+			resultType = v.returnType.type,
 			argumentNames = elementList (v.arguments, 'name'),
 			argumentTypes = elementList (v.arguments, 'type')
 		})
