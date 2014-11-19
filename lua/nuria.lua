@@ -375,7 +375,9 @@ function prototypeArguments(types)
 	local r = {}
 	for k, v in ipairs (types) do
 		local type = v.type
-		if not v.isPodType then type = 'const ' .. type .. '&' end
+		if not v.isPodType and not (v.isReference and not v.isConst) then
+			type = 'const ' .. type .. '&'
+		end
 		table.insert (r, type .. ' ' .. v.name)
 	end
 	
@@ -437,6 +439,13 @@ function constructorCallback(class, method)
 end
 
 function useMethodTrampoline(class, method)
+	for i=1,#method.arguments do
+		local cur = method.arguments[i]
+		if cur.isReference and not cur.isConst then
+			return true
+		end
+	end
+	
 	return method.hasOptionalArguments
 end
 
