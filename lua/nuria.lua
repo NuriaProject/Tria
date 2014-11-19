@@ -439,19 +439,23 @@ function constructorCallback(class, method)
 	return 'Nuria::Callback::fromLambda ([](' .. args .. ') { return ' .. methodInvoke (class, method) .. '; });'
 end
 
+function isTypeNonConstRef(type)
+	return type.isReference and not type.isConst
+end
+
 function useMethodTrampoline(class, method)
 	for i=1,#method.arguments do
 		local cur = method.arguments[i]
-		if cur.isReference and not cur.isConst then
+		if isTypeNonConstRef(cur) then
 			return true
 		end
 	end
 	
-	return method.hasOptionalArguments
+	return isTypeNonConstRef(method.returnType) or method.hasOptionalArguments
 end
 
 function lambdaCallback(class, method)
-	local call = ''
+	local call, toType = '', ''
 	local args = methodArguments (method)
 	local passArgs = table.concat (elementList (method.arguments, 'name'), ', ')
 	
@@ -463,11 +467,14 @@ function lambdaCallback(class, method)
 	end
 	
 	-- 
-	if method.returnType ~= 'void' then call = 'return ' .. call end
+	if method.returnType.type ~= 'void' then call = 'return ' .. call end
+	if isTypeNonConstRef(method.returnType) then
+		toType = '-> ' .. method.returnType.type .. ' '
+	end
 	
 	-- 
 	call = call .. method.name .. ' (' .. passArgs .. ')'
-	return 'Nuria::Callback::fromLambda ([__instance](' .. args .. ') { ' .. call .. '; });'
+	return 'Nuria::Callback::fromLambda ([__instance](' .. args .. ') ' .. toType .. '{ ' .. call .. '; });'
 end
 
 function methodToCallback(class, method)
