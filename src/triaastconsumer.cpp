@@ -1051,7 +1051,7 @@ void TriaASTConsumer::declareType (const clang::QualType &type) {
 	QString desugared = typeName (type.getDesugaredType (*this->m_context));
 	int metaId = QMetaType::type (qPrintable(name));
 	
-	if (metaId != QMetaType::UnknownType && metaId < QMetaType::User) {
+	if (metaId != QMetaType::UnknownType && metaId <= QMetaType::HighestInternalId) {
 		return;
 	}
 	
@@ -1060,6 +1060,7 @@ void TriaASTConsumer::declareType (const clang::QualType &type) {
         }
         
 	// 
-	this->m_definitions->declareType (name);
+	bool isIncomplete = (ptr != pointee && pointee->isIncompleteType () && !pointee->isVoidType ());
+	this->m_definitions->declareType (name, !isIncomplete);
 	
 }

@@ -28,6 +28,7 @@
 #include <clang/Tooling/Tooling.h>
 #include "triaaction.hpp"
 #include "defs.hpp"
+#undef bool
 
 Definitions::Definitions (const QStringList &sourceFiles)
 	: m_fileNames (sourceFiles)
@@ -63,25 +64,15 @@ bool Definitions::isTypeDeclared (const QString &type) {
 	return this->m_declaredTypes.contains (type);
 }
 
-StringSet Definitions::declareTypes () const {
+QMap< QString, bool > Definitions::declareTypes() const {
 	return this->m_declareTypes;
 }
 
-StringSet Definitions::declareTypesWithoutDuplicates () const {
-	StringSet result;
-	
-	for (const QString cur : this->m_declareTypes) {
-		if (!this->m_typeDefs.contains (cur)) {
-			result.insert (cur);
-		}
-		
+void Definitions::declareType (const QString &type, bool isFullyDeclared) {
+	if (this->m_declareTypes.value (type) == false) {
+		this->m_declareTypes.insert (type, isFullyDeclared);
 	}
 	
-	return result;
-}
-
-void Definitions::declareType (const QString &type) {
-	this->m_declareTypes.insert (type);
 }
 
 void Definitions::undeclareType (const QString &type) {

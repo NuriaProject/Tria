@@ -19,6 +19,7 @@
 #define DEFINITIONS_HPP
 
 #include "defs.hpp"
+#undef bool
 
 #include <QStringList>
 #include <functional>
@@ -60,16 +61,10 @@ public:
 	bool isTypeDeclared (const QString &type);
 	
 	/** Returns the list of to-be-declared types. */
-	StringSet declareTypes () const;
-	
-	/**
-	 * Like declareTypes(), but removes all typedefs before returning
-	 * the list. \sa addTypeDef
-	 */
-	StringSet declareTypesWithoutDuplicates () const;
+	QMap< QString, bool > declareTypes () const;
 	
 	/** Tells the generator to generate a metatype declaration. */
-	void declareType (const QString &type);
+	void declareType (const QString &type, bool isFullyDeclared);
 	
 	/** Takes \a type out of the to-be-declared list. */
 	void undeclareType (const QString &type);
@@ -110,7 +105,7 @@ private:
 	// 
 	QStringList m_fileNames;
 	StringSet m_declaredTypes;
-	StringSet m_declareTypes;
+	QMap< QString, bool > m_declareTypes;
 	StringSet m_avoidedTypes;
 	StringMap m_typeDefs;
 	QVector< ClassDef > m_classes;

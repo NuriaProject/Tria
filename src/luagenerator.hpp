@@ -55,6 +55,7 @@ private:
 	void exportStringSet (lua_State *lua, const char *name, const StringSet &set);
 	void exportStringMap (lua_State *lua, const char *name, const StringMap &map);
 	void exportStringList (lua_State *lua, const char *name, const QStringList &list);
+	void exportStringBoolMap (lua_State *lua, const char *name, const QMap< QString, bool > &map);
 	void exportClassDefinitions (lua_State *lua);
 	void exportClassDefinition (lua_State *lua, const ClassDef &def);
 	void exportClassDefinitionBase (lua_State *lua, const ClassDef &def);
