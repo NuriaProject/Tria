@@ -640,7 +640,8 @@ void TriaASTConsumer::processMethod (ClassDef &classDef, clang::FunctionDecl *de
 		// Also ignore if the type is private (i.e. QPrivateSignal)
 		clang::CXXRecordDecl *typeRec = param->getType ().getTypePtr ()->getAsCXXRecordDecl ();
 		if (!hasTypeValueSemantics (param->getType ()) ||
-		    (typeRec && typeRec->getAccess () != clang::AS_public)) {
+		    (typeRec && typeRec->getAccess () != clang::AS_public &&
+		     typeRec->getAccess () != clang::AS_none)) {
 			this->m_definitions->avoidType (var.type);
 			return;
 		}
@@ -748,10 +749,8 @@ void TriaASTConsumer::processEnum (ClassDef &classDef, clang::EnumDecl *decl, bo
 	// Store and declare
 	classDef.enums.append (def);
 	declareType (clang::QualType (decl->getTypeForDecl (), 0));
-//	this->m_definitions->declareType (classDef.name + QStringLiteral ("::") + def.name);
-	
 }
-#include <qmetatype.h>
+
 void TriaASTConsumer::processConversion (ClassDef &classDef, clang::CXXConversionDecl *convDecl) {
 	if (!hasTypeValueSemantics (convDecl->getConversionType ())) {
 		return;
@@ -1042,8 +1041,7 @@ void TriaASTConsumer::declareType (const clang::QualType &type) {
 		decl = ptr->getPointeeCXXRecordDecl ();
 	}
 	
-	if ((type.isPODType (*this->m_context) && !ptr->isEnumeralType () && !ptr->isPointerType ()) ||
-	    ptr->isVoidType () || ptr->isTemplateTypeParmType () || pointee->isTemplateTypeParmType () ||
+	if (ptr->isVoidType () || ptr->isTemplateTypeParmType () || pointee->isTemplateTypeParmType () ||
 	    isDeclUnnamed (decl) || !hasTypeValueSemantics (type)) {
 		return;
 	}
