@@ -95,6 +95,21 @@ function values(t)
 	return result
 end
 
+-- Returns a table where all key, values in 't' are copied for which 'func(k,v)' returned true
+function filtered (t, func)
+	local r = {}
+	local useArray = (#t > 0)
+	
+	for k, v in pairs(t) do
+		if func (k, v) then
+			if useArray then table.insert (r, v)
+			else table.insert (r, k, v) end
+		end
+	end
+	
+	return r
+end
+
 -- Finds all values in 't' where 'key' is 'value'
 function findAll(t, key, value)
 	local r = {}

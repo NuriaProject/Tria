@@ -133,15 +133,22 @@ function shouldDeclareMetatype(name)
 	return true
 end
 
-function writeDeclareMetatype(name)
+function writeDeclareMetatype(name, fullyDeclared)
+	fullyDeclared = (fullyDeclared == nil) and true or fullyDeclared
+	
 	local typedef = definitions.typedefs[name]
+	local macro = 'Q_DECLARE_METATYPE_IMPL'
 	if not shouldDeclareMetatype (name) or
 	   (typedef and not shouldDeclareMetatype (typedef)) then
 		return
 	end
 	
+	if not fullyDeclared then macro = 'Q_DECLARE_OPAQUE_POINTER' end
+	local nameType = name:gsub ('*', '')
+	if definitions.classes[name] or definitions.classes[nameType] then return end
+	
 	table.insert (definitions.declaredTypes, name)
-	write ("Q_DECLARE_METATYPE_IMPL(FWD(" .. name .. "))\n")
+	write (macro .. "(FWD(" .. name .. "))\n")
 end
 
 function escapeName(name)
@@ -337,10 +344,9 @@ end
 
 function writeMethodFunc(methods, prolog, default, func)
 	local r = {}
-	local i = 0
 	
-	for i, v in ipairs (methods) do
-		r[i - 1] = 'return ' .. func(v) .. ';'
+	for i=1,#methods do
+		r[i - 1] = 'return ' .. func(methods[i]) .. ';'
 	end
 	
 	local head = "  " .. prolog .. " (int index) {\n"
@@ -689,6 +695,26 @@ function enumElementValue(enum, class)
 	return tableToSwitch (t, 'at', false, 1) .. 'break;'
 end
 
+function shouldFilterMethod(m)
+	local Avoid = function(type)
+		return definitions.declareTypes[type.type] == false or
+		       table.containsValue (definitions.avoidedTypes, type.type)
+	end
+	
+	if m.type == 'constructor' then return false end
+	if Avoid (m.returnType) then return true end
+	for i=1,#m.arguments do
+		if Avoid (m.arguments[1]) then return true end
+	end
+	
+	return false
+end
+
+function filterClassMethods(class)
+	local Keep = function(k, m) return not shouldFilterMethod (m) end
+	return filtered (class.methods, Keep)
+end
+
 function writeGateCall()
 		write ("  void gateCall (GateMethod method, int category, int index, int nth, \n" ..
 	       "                 void *result, void *additional) override {\n" ..
@@ -765,6 +791,7 @@ function writeClassDef(name, class)
 	local EnumElemCount = function(v) return 'return ' .. table.length (v.elements) .. ';' end
 	
 	if class.hasValueSemantics then writeMemberConverters(class) end
+	class.methods = filterClassMethods (class)
 	
 	-- Write short methods
 	write ("class Q_DECL_HIDDEN " .. metaObjectClassName (name) .. " : public Nuria::MetaObject {\n" ..
@@ -836,8 +863,8 @@ function registerMetaType(typeName)
 end
 
 function writeRegisterMetatypes()
-	for k, v in ipairs (definitions.declareTypes) do
-		write ("    " .. registerMetaType (v))
+	for k, v in pairs (definitions.declareTypes) do
+		if v then write ("    " .. registerMetaType (k)) end
 	end
 end
 
@@ -908,7 +935,7 @@ write ("\n" ..
 
 -- Q_DECLARE_METATYPEs
 for k,v in pairs(definitions.classes) do writeClassDeclareMetatype (v) end
-for k,v in ipairs(definitions.declareTypes) do writeDeclareMetatype (v) end
+for k,v in pairs(definitions.declareTypes) do writeDeclareMetatype (k, v) end
 
 -- 
 write ("\n" ..
