@@ -365,7 +365,8 @@ function writeMethodInvokeFunc(class, name, func)
 		table.insert (t, i - 1, func (class, v))
 	end
 	
-	local head = "  Nuria::Callback " .. name .. " (void *__instance, int index) {\n"
+	local head = "  Nuria::Callback " .. name .. " (void *__instance, int index) {\n" ..
+	             "    (void)__instance;\n"
 	local switch = indentCode (4, tableToSwitch (t, "index", false)) .. "\n"
 	local foot = "    return Nuria::Callback ();\n  }\n\n"
 	write (head .. switch .. foot)
@@ -582,14 +583,14 @@ function methodArgumentTest(class, method)
 	        methodArguments (method) .. ') { ' .. inner .. ' });'
 end
 
-function writeFieldFunc(class, proto, default, func)
+function writeFieldFunc(class, proto, voids, default, func)
 	local t = {}
 	
 	for k, v in ipairs (class.variables) do
 		table.insert (t, func(v.name, v, class))
 	end
 	
-	write ('  ' .. proto .. ' {\n' ..
+	write ('  ' .. proto .. ' {\n    ' .. voids .. '\n' ..
 	       indentCode (4, tableToSwitch (t, 'index', false, 1)) ..
 	       '\n    return ' .. default .. ';\n  }\n\n')
 end
@@ -656,13 +657,13 @@ function fieldWrite(name, data, class)
 	
 end
 
-function writeEnumFunc(class, proto, default, func)
+function writeEnumFunc(class, proto, voids, default, func)
 	local t = {}
 	for k, v in spairs (class.enums) do
 		table.insert (t, func(v, class))
 	end
 	
-	write ('  ' .. proto .. ' {\n' ..
+	write ('  ' .. proto .. ' {\n    ' .. voids .. '\n' ..
 	       indentCode (4, tableToSwitch (t, 'index', false, 1)) ..
 	       '\n    return ' .. default .. ';\n  }\n\n')
 end
@@ -805,14 +806,18 @@ function writeClassDef(name, class)
 	writeMethodInvokeFunc (class, '_methodUnsafeCallback', methodUnsafeCallback)
 	writeMethodInvokeFunc (class, '_methodCallback', methodCallback)
 	writeMethodInvokeFunc (class, '_methodArgumentTest', methodArgumentTest)
-	writeFieldFunc (class, 'Nuria::MetaField::Access _fieldAccess (int index)', 
+	writeFieldFunc (class, 'Nuria::MetaField::Access _fieldAccess (int index)', '',
 	                'Nuria::MetaField::NoAccess', fieldAccess)
-	writeFieldFunc (class, 'QByteArray _fieldType (int index)', 'QByteArray ()', FieldType)
-	writeFieldFunc (class, 'QVariant _fieldRead (int index, void *__instance)', 'QVariant ()', fieldRead)
-	writeFieldFunc (class, 'bool _fieldWrite (int index, void *__instance, const QVariant &__value)', 'false', fieldWrite)
-	writeEnumFunc (class, 'int _enumElementCount (int index)', '0', EnumElemCount)
-	writeEnumFunc (class, 'QByteArray _enumElementKey (int index, int at)', 'QByteArray ()', enumElementKey)
-	writeEnumFunc (class, 'int _enumElementValue (int index, int at)', '-1', enumElementValue)
+	writeFieldFunc (class, 'QByteArray _fieldType (int index)', '', 'QByteArray ()', FieldType)
+	writeFieldFunc (class, 'QVariant _fieldRead (int index, void *__instance)',
+	                '(void)__instance;', 'QVariant ()', fieldRead)
+	writeFieldFunc (class, 'bool _fieldWrite (int index, void *__instance, const QVariant &__value)',
+	                '(void)__instance; (void)__value;', 'false', fieldWrite)
+	writeEnumFunc (class, 'int _enumElementCount (int index)', '', '0', EnumElemCount)
+	writeEnumFunc (class, 'QByteArray _enumElementKey (int index, int at)',
+	               '(void)at;', 'QByteArray ()', enumElementKey)
+	writeEnumFunc (class, 'int _enumElementValue (int index, int at)',
+	               '(void)at;', '-1', enumElementValue)
 	writeGateCall ()
 	
 	-- End
