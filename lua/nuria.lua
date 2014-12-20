@@ -137,7 +137,11 @@ function writeDeclareMetatype(name, fullyDeclared)
 	fullyDeclared = (fullyDeclared == nil) and true or fullyDeclared
 	
 	local typedef = definitions.typedefs[name]
-	local macro = fullyDeclared and 'Q_DECLARE_METATYPE_IMPL' or 'Q_DECLARE_OPAQUE_POINTER'
+	local macro = fullyDeclared and 'NURIA_DECLARE_METATYPE' or 'Q_DECLARE_OPAQUE_POINTER'
+	
+	if not fullyDeclared and name:find (',') then
+		name = '(' .. name .. ')'
+	end
 	
 	if not shouldDeclareMetatype (name) or
 	   (typedef and not shouldDeclareMetatype (typedef)) then
@@ -145,7 +149,7 @@ function writeDeclareMetatype(name, fullyDeclared)
 	end
 	
 	table.insert (definitions.declaredTypes, name)
-	write (macro .. "(FWD(" .. name .. "))\n")
+	write (macro .. "(" .. name .. ")\n")
 end
 
 function escapeName(name)
@@ -927,8 +931,7 @@ end
 
 writeHeader ()
 for k, v in ipairs(tria.sourceFiles) do writeInclude (v) end
-write ("\n" ..
-       "#define FWD(...) __VA_ARGS__\n")
+write ("\n")
 
 -- Q_DECLARE_METATYPEs
 for k,v in pairs(definitions.classes) do writeClassDeclareMetatype (v) end
@@ -936,7 +939,6 @@ for k,v in pairs(definitions.declareTypes) do writeDeclareMetatype (k, v) end
 
 -- 
 write ("\n" ..
-       "#undef FWD\n" ..
        "#define RESULT(Type) *reinterpret_cast< Type * > (result)\n" ..
        "namespace TriaObjectData {\n\n")
 
