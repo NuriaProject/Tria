@@ -118,9 +118,9 @@ end
 function writeClassDeclareMetatype(class)
 	if class.isFakeClass then return end
 	
-	writeDeclareMetatype (class.name .. '*')
+	writeDeclareMetatype (class.name .. '*', true)
 	if class.hasValueSemantics then
-		writeDeclareMetatype (class.name)
+		writeDeclareMetatype (class.name, true)
 	end
 end
 
@@ -137,15 +137,12 @@ function writeDeclareMetatype(name, fullyDeclared)
 	fullyDeclared = (fullyDeclared == nil) and true or fullyDeclared
 	
 	local typedef = definitions.typedefs[name]
-	local macro = 'Q_DECLARE_METATYPE_IMPL'
+	local macro = fullyDeclared and 'Q_DECLARE_METATYPE_IMPL' or 'Q_DECLARE_OPAQUE_POINTER'
+	
 	if not shouldDeclareMetatype (name) or
 	   (typedef and not shouldDeclareMetatype (typedef)) then
 		return
 	end
-	
-	if not fullyDeclared then macro = 'Q_DECLARE_OPAQUE_POINTER' end
-	local nameType = name:gsub ('*', '')
-	if definitions.classes[name] or definitions.classes[nameType] then return end
 	
 	table.insert (definitions.declaredTypes, name)
 	write (macro .. "(FWD(" .. name .. "))\n")
