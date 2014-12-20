@@ -160,6 +160,10 @@ bool TriaASTConsumer::derivesFromIntrospectClass (const clang::CXXRecordDecl *re
 		return false;
 	}
 	
+	if (this->m_introspectedBases.contains (typeDeclName (record))) {
+		return true;
+	}
+	
 	for (auto it = record->bases_begin (); it != record->bases_end (); ++it) {
 		const clang::CXXBaseSpecifier &specifier = *it;
 		const clang::Type *type = specifier.getType ().getTypePtr ();
@@ -871,7 +875,7 @@ void TriaASTConsumer::processClass (clang::CXXRecordDecl *record) {
 	ClassDef classDef;
 	classDef.loc = record->getSourceRange ();
 	classDef.access = record->getAccess ();
-	classDef.name = typeDeclName (record); // QString::fromStdString (record->getQualifiedNameAsString ());
+	classDef.name = typeDeclName (record);
 	classDef.file = fileOfDecl (record);
 	classDef.annotations = annotationsFromDecl (record);
 	
