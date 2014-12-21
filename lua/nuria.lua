@@ -611,12 +611,23 @@ end
 
 function isFieldWritable(variable)
 	return (variable.setter == '' and variable.getter == '') or
-	       (variable.getter ~= '' and variable.setter ~= '')
+	       (variable.getter ~= '' and variable.setter ~= '') or
+	       (variable.getter == '' and variable.setter ~= '')
+end
+
+function isFieldReadable(variable)
+	return (variable.setter == '' and variable.getter == '') or
+	       (variable.getter ~= '' and variable.setter ~= '') or
+	       (variable.getter ~= '' and variable.setter == '')
 end
 
 function fieldAccess(name, data)
-	if (isFieldWritable (data)) then
-		return "return Nuria::MetaField::ReadWrite;"
+	if isFieldWritable (data) then
+		if isFieldReadable (data) then
+			return "return Nuria::MetaField::ReadWrite;"
+		end
+		
+		return 'return Nuria::MetaField::WriteOnly;'
 	end
 	
 	return "return Nuria::MetaField::ReadOnly;"
@@ -624,6 +635,9 @@ end
 
 function fieldRead(name, data, class)
 	local f = name
+	
+	-- Write-only fields
+	if not isFieldReadable (data) then return 'return QVariant ();' end
 	if data.getter ~= '' then f = data.getter .. ' ()' end
 	return 'return QVariant::fromValue (' .. reinterpretCast (class) .. '->' .. f .. ');'
 end
