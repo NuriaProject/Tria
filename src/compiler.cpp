@@ -60,7 +60,11 @@ static clang::driver::Driver *createDriver (clang::DiagnosticsEngine *diag, cons
 	using namespace clang::driver;
 	
 	std::string targetTriple = llvm::sys::getDefaultTargetTriple ();
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+	Driver *driver = new Driver (applicationName, targetTriple, "", *diag);
+#else
 	Driver *driver = new Driver (applicationName, targetTriple, *diag);
+#endif
 	driver->setTitle ("clang_based_tool");
 	driver->setCheckInputsExist (false);
 	

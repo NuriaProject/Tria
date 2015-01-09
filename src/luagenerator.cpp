@@ -344,7 +344,11 @@ void LuaGenerator::addLog (lua_State *lua) {
 	
 	addLogFunc (lua, "ignored", clang::DiagnosticsEngine::Ignored, this->m_compiler);
 	addLogFunc (lua, "note", clang::DiagnosticsEngine::Note, this->m_compiler);
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+	addLogFunc (lua, "remark", clang::DiagnosticsEngine::Note, this->m_compiler);
+#else
 	addLogFunc (lua, "remark", clang::DiagnosticsEngine::Remark, this->m_compiler);
+#endif
 	addLogFunc (lua, "warning", clang::DiagnosticsEngine::Warning, this->m_compiler);
 	addLogFunc (lua, "error", clang::DiagnosticsEngine::Error, this->m_compiler);
 	addLogFunc (lua, "fatal", clang::DiagnosticsEngine::Fatal, this->m_compiler);
