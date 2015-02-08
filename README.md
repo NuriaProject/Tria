@@ -48,3 +48,8 @@ Features
 
 As a side-note, both the C++/Nuria and the JSON generator are implemented using
 the Lua generator!
+
+License
+-------
+
+Tria is licensed under the LGPLv3. See COPYING.LESSER for more information.
