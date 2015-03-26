@@ -17,10 +17,10 @@
 #include "filemapper.hpp"
 
 #include <clang/Frontend/CompilerInvocation.h>
-#include <QString>
-
 #include <llvm/Support/MemoryBuffer.h>
+#include <clang/Basic/Version.h>
 #include "compiler.hpp"
+#include <QString>
 
 FileMapper::FileMapper () {
 	
@@ -60,8 +60,13 @@ void FileMapper::applyMapping (Compiler *compiler) {
 		llvm::StringRef name (it.key ().constData (), it.key ().length ());
 		llvm::StringRef data (it->constData (), it->length ());
 		
+#if CLANG_VERSION_MINOR < 6
 		llvm::MemoryBuffer *input = llvm::MemoryBuffer::getMemBuffer (data);
 		invocation->getPreprocessorOpts ().addRemappedFile (name, input);
+#else
+		std::unique_ptr< llvm::MemoryBuffer > input (llvm::MemoryBuffer::getMemBuffer (data));
+		invocation->getPreprocessorOpts ().addRemappedFile (name, input.get());
+#endif
 	}
 	
 }

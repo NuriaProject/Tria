@@ -19,6 +19,7 @@
 
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Lex/PPCallbacks.h>
+#include <clang/Basic/Version.h>
 #include <QByteArray>
 #include <QVector>
 
@@ -61,8 +62,14 @@ public:
 	
 protected:
 	
-	virtual clang::ASTConsumer *CreateASTConsumer (clang::CompilerInstance &ci,
-						       llvm::StringRef fileName) override;
+#if CLANG_VERSION_MINOR < 6
+	typedef clang::ASTConsumer *CreateAstConsumerResultType;
+#else
+	typedef std::unique_ptr< clang::ASTConsumer > CreateAstConsumerResultType;
+#endif
+	
+	virtual CreateAstConsumerResultType CreateASTConsumer (clang::CompilerInstance &ci,
+	                                                       llvm::StringRef fileName) override;
 	
 private:
 	Definitions *m_definitions;

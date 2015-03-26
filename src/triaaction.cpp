@@ -66,7 +66,16 @@ static QByteArray sourceFileName (const QStringList &files) {
 	return QByteArrayLiteral("Source files");
 }
 
-clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, llvm::StringRef fileName) {
+#if CLANG_VERSION_MINOR < 6
+#define UNIQUE_COMPAT(Type, Name, Value) Type *Name = Value
+#define MOVE_COMPAT(X) (X)
+#else
+#define UNIQUE_COMPAT(Type, Name, Value) std::unique_ptr< Type > Name (Value)
+#define MOVE_COMPAT(X) std::move(X)
+#endif
+
+TriaAction::CreateAstConsumerResultType TriaAction::CreateASTConsumer (clang::CompilerInstance &ci,
+                                                                       llvm::StringRef fileName) {
 	ci.getFrontendOpts().SkipFunctionBodies = true;
 	ci.getPreprocessor().enableIncrementalProcessing (true);
 	ci.getLangOpts().DelayedTemplateParsing = true;
@@ -75,14 +84,19 @@ clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, 
 	ci.getLangOpts().MicrosoftExt = true;
 	ci.getLangOpts().DollarIdents = true;
 	ci.getLangOpts().CPlusPlus11 = true;
-	ci.getLangOpts().CPlusPlus1y = true;
 	ci.getLangOpts().GNUMode = true;
 	
+#if CLANG_VERSION_MINOR < 6
+	ci.getLangOpts().CPlusPlus1y = true;
+#else
+	ci.getLangOpts().CPlusPlus14 = true;
+#endif
+	
 	if (argVerboseTimes) {
-		PreprocessorHooks *hook = new PreprocessorHooks (ci);
+		UNIQUE_COMPAT(PreprocessorHooks, hook, new PreprocessorHooks (ci));
 		hook->timing ()->name = sourceFileName (this->m_definitions->sourceFiles ());
 		this->m_definitions->setTimingNode (hook->timing ());
-		ci.getPreprocessor ().addPPCallbacks (hook);
+		ci.getPreprocessor ().addPPCallbacks (MOVE_COMPAT(hook));
 	}
 	
 	// 
@@ -92,8 +106,14 @@ clang::ASTConsumer *TriaAction::CreateASTConsumer (clang::CompilerInstance &ci, 
 	}
 	
 	// 
-	return new TriaASTConsumer (ci, fileName, whichInherit, argInspectAll,
-	                            argGlobalClass, this->m_definitions);
+	TriaASTConsumer *consumer = new TriaASTConsumer (ci, fileName, whichInherit, argInspectAll,
+	                                                 argGlobalClass, this->m_definitions);
+	
+#if CLANG_VERSION_MINOR < 6
+	return consumer;
+#else
+	return std::unique_ptr< clang::ASTConsumer > (consumer);
+#endif
 }
 
 static inline qint64 nowUsec () {

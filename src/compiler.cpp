@@ -86,13 +86,17 @@ const llvm::opt::ArgStringList *Compiler::getCC1Arguments () const {
 	}
 	
 	// The invoked job must be 'clang'
-	const Command *cmd = llvm::cast< Command > (*jobs.begin());
-	if (llvm::StringRef (cmd->getCreator ().getName ()) != "clang") {
+#if CLANG_VERSION_MINOR < 6
+	const Command &cmd = *llvm::cast< Command > (*jobs.begin());
+#else
+	Command &cmd = llvm::cast< Command > (*jobs.begin());
+#endif
+	if (llvm::StringRef (cmd.getCreator ().getName ()) != "clang") {
 		this->m_diag->Report (clang::diag::err_fe_expected_clang_command);
 		return nullptr;
 	}
 	
-	return &cmd->getArguments ();
+	return &cmd.getArguments ();
 }
 
 bool Compiler::prepare (FileMapper *fileMapper, const std::vector< std::string > &arguments) {
