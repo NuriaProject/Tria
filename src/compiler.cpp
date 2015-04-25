@@ -47,6 +47,7 @@ Compiler::Compiler (Definitions *definitions) {
 }
 
 Compiler::~Compiler () {
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR < 6
 	delete this->m_compiler;
 	delete this->m_action;
 //	delete this->m_invocation; // Owned by m_compiler
@@ -54,6 +55,7 @@ Compiler::~Compiler () {
 	delete this->m_diagPrinter;
 //	delete this->m_diagOpts; // Owned by m_diag
 	delete this->m_textDiag;
+#endif
 }
 
 static clang::driver::Driver *createDriver (clang::DiagnosticsEngine *diag, const char *applicationName) {
